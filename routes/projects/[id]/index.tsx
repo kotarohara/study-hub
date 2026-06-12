@@ -14,6 +14,15 @@ import {
 } from "../../../lib/objects/milestones.ts";
 import { MilestoneList } from "../../../components/ooui/MilestoneList.tsx";
 import {
+  type CalendarEntry,
+  MonthCalendar,
+} from "../../../components/ooui/MonthCalendar.tsx";
+import {
+  monthParam,
+  type MonthRef,
+  parseMonthParam,
+} from "../../../lib/ooui/calendar.ts";
+import {
   getProjectFor,
   listAddableMembers,
   listProjectMembers,
@@ -33,6 +42,7 @@ interface Data {
   studies: Study[];
   documents: Document[];
   milestones: MilestoneWithMeta[];
+  calendarMonth: MonthRef;
 }
 
 const TABS = [
@@ -71,6 +81,10 @@ export const handler = define.handlers({
       milestones: onTimelineTab
         ? await listMilestonesOfProject(db, project.id)
         : [],
+      calendarMonth: parseMonthParam(
+        ctx.url.searchParams.get("month"),
+        new Date(),
+      ),
     });
   },
 });
@@ -259,16 +273,39 @@ export default define.page<typeof handler>(({ data, state, url }) => {
           </div>
         )}
         {data.activeTab === "timeline" && (
-          <MilestoneList
-            items={data.milestones}
-            byId={new Map(
-              data.milestones.map((m) => [m.milestone.id, m.milestone.title]),
-            )}
-            canManage={canManage && project.status === "active"}
-            owners={data.projectMembers}
-            addAction={`/projects/${project.id}/milestones/add`}
-            emptyMessage="No milestones yet — project-level ones can be added here; study milestones roll up automatically."
-          />
+          <div class="space-y-4">
+            <MonthCalendar
+              month={data.calendarMonth}
+              baseHref={`/projects/${project.id}`}
+              today={new Date().toISOString().slice(0, 10)}
+              entries={data.milestones.flatMap(
+                (m): CalendarEntry[] =>
+                  m.milestone.dueOn?.toISOString().slice(0, 7) ===
+                      monthParam(data.calendarMonth)
+                    ? [{
+                      date: m.milestone.dueOn.toISOString().slice(0, 10),
+                      label: m.milestone.title,
+                      href: m.milestone.studyId
+                        ? `/studies/${m.milestone.studyId}?tab=timeline`
+                        : `/projects/${project.id}?tab=timeline`,
+                      status: m.milestone.status,
+                    }]
+                    : [],
+              )}
+            />
+            <MilestoneList
+              items={data.milestones}
+              byId={new Map(
+                data.milestones.map((
+                  m,
+                ) => [m.milestone.id, m.milestone.title]),
+              )}
+              canManage={canManage && project.status === "active"}
+              owners={data.projectMembers}
+              addAction={`/projects/${project.id}/milestones/add`}
+              emptyMessage="No milestones yet — project-level ones can be added here; study milestones roll up automatically."
+            />
+          </div>
         )}
       </DetailView>
     </Layout>

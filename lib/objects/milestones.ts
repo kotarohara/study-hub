@@ -230,6 +230,25 @@ export async function updateMilestone(
   return updated;
 }
 
+/** Date-only update used by drag-to-reschedule on the Gantt. */
+export async function rescheduleMilestone(
+  db: Db,
+  opts: {
+    milestone: Milestone;
+    startsOn: Date | null;
+    dueOn: Date | null;
+    actor: Member;
+  },
+): Promise<Milestone> {
+  validateDates(opts.startsOn, opts.dueOn);
+  const [updated] = await db
+    .update(milestones)
+    .set({ startsOn: opts.startsOn, dueOn: opts.dueOn, updatedAt: new Date() })
+    .where(eq(milestones.id, opts.milestone.id))
+    .returning();
+  return updated;
+}
+
 /** Status changes respect blocking: a milestone with an unfinished
  * dependency cannot be started or completed. */
 export async function setMilestoneStatus(

@@ -24,6 +24,7 @@ import {
   MILESTONE_TEMPLATES,
   MilestoneError,
   removeDependency,
+  rescheduleMilestone,
   setMilestoneStatus,
   updateMilestone,
   wouldCreateCycle,
@@ -357,5 +358,39 @@ Deno.test("duplicate copies milestones with pending status and remapped deps", a
     );
     assert.deepEqual(second.dependsOn, [first.milestone.id]);
     assert.equal(second.blocked, true);
+  });
+});
+
+Deno.test("reschedule: date-only update with validation", async () => {
+  await withEnv(async ({ researcher, project, study }) => {
+    const db = await getTestDb();
+    const m = await createMilestone(db, {
+      project,
+      study,
+      title: "Movable",
+      startsOn: new Date("2026-07-01"),
+      dueOn: new Date("2026-07-10"),
+      createdBy: researcher,
+    });
+    const moved = await rescheduleMilestone(db, {
+      milestone: m,
+      startsOn: new Date("2026-07-08"),
+      dueOn: new Date("2026-07-17"),
+      actor: researcher,
+    });
+    assert.equal(moved.startsOn?.toISOString().slice(0, 10), "2026-07-08");
+    assert.equal(moved.dueOn?.toISOString().slice(0, 10), "2026-07-17");
+    assert.equal(moved.title, "Movable"); // untouched
+
+    await assert.rejects(
+      () =>
+        rescheduleMilestone(db, {
+          milestone: moved,
+          startsOn: new Date("2026-08-01"),
+          dueOn: new Date("2026-07-01"),
+          actor: researcher,
+        }),
+      MilestoneError,
+    );
   });
 });

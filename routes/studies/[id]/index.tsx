@@ -21,6 +21,8 @@ import {
 } from "../../../lib/objects/milestones.ts";
 import { listProjectMembers } from "../../../lib/objects/projects.ts";
 import { MilestoneList } from "../../../components/ooui/MilestoneList.tsx";
+import TimelineGantt from "../../../islands/TimelineGantt.tsx";
+import { type GanttItem, ganttRange } from "../../../lib/ooui/gantt.ts";
 import type { Condition, Document, Member } from "../../../lib/db/schema.ts";
 import { Layout } from "../../../components/Layout.tsx";
 import { DetailView } from "../../../components/ooui/DetailView.tsx";
@@ -342,6 +344,26 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         )}
         {data.activeTab === "timeline" && (
           <div class="space-y-4">
+            {(() => {
+              const items: GanttItem[] = data.milestones.map((m) => ({
+                id: m.milestone.id,
+                title: m.milestone.title,
+                start: m.milestone.startsOn?.toISOString().slice(0, 10) ??
+                  null,
+                due: m.milestone.dueOn?.toISOString().slice(0, 10) ?? null,
+                status: m.milestone.status,
+                blocked: m.blocked,
+              }));
+              const range = ganttRange(items);
+              return range && (
+                <TimelineGantt
+                  items={items}
+                  rangeStartIso={range.start.toISOString().slice(0, 10)}
+                  rangeDays={range.days}
+                  editable={hasRole(me.role, "researcher")}
+                />
+              );
+            })()}
             {hasRole(me.role, "researcher") && (
               <form
                 method="post"

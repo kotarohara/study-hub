@@ -210,7 +210,14 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       `MilestoneList` component (render-tested). duplicateStudy copies the timeline (statuses
       reset to pending, dependencies remapped). Deletes and status changes audited.
       Status flips allowed for assistant+; structure changes researcher+.
-- [ ] 1.10 TimelineGantt island + project roll-up calendar
+- [x] 1.10 TimelineGantt island + project roll-up calendar
+      — first client-side island (`islands/TimelineGantt.tsx`): milestones as bars on a
+      month-scaled axis (status colors, blocked ring, today marker, undated listed below) with
+      **drag-to-reschedule** (pointer events → whole-day snap → POST /milestones/[id]/reschedule
+      → reload); geometry is pure + unit-tested in `lib/ooui/gantt.ts`. Project Timeline tab adds
+      a server-rendered month calendar (Mon-based grid, prev/next via ?month=, due-dated
+      milestones link to their study) over the roll-up list; calendar math pure + unit-tested in
+      `lib/ooui/calendar.ts`. rescheduleMilestone is date-only with validation (integration test).
 
 ## Phase 2 — Participants & Recruitment
 
