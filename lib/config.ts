@@ -26,6 +26,9 @@ const ConfigSchema = z.object({
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535),
   MAIL_FROM: z.string().min(1),
+  // Schema-level defaults: optional knobs, defaulted in every environment.
+  BACKUP_CRON_ENABLED: z.stringbool().default(false),
+  BACKUP_CRON: z.string().default("0 18 * * *"), // 02:00 SGT
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

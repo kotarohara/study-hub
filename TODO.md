@@ -48,12 +48,22 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       anything needing JSR or container pulls when the dev sandbox blocks those hosts.
 
 ### 0.2 Data layer + backups
-- [ ] Drizzle ORM setup: connection pool, migration runner, first migration (members table as guinea pig)
-- [ ] Test helpers: per-test transaction rollback or template-DB reset; fake-data factories
-- [ ] Seed script with realistic fake data (faker), runnable via `deno task db:seed`
-- [ ] `FileStore` interface + S3-API implementation (works against MinIO and real S3); presigned upload/download URLs; tests against MinIO
-- [ ] `scripts/backup.sh`: `pg_dump` → versioned bucket (MinIO locally); `scripts/restore.sh`; automated test that backs up, drops, restores, verifies
-- [ ] Backup job wiring via `Deno.cron` (interval configurable; manual-trigger route in dev)
+- [x] Drizzle ORM setup: connection pool, migration runner, first migration (members table as guinea pig)
+      — `lib/db/{schema,client,migrate}.ts`; migrations generated with drizzle-kit
+      (`deno task db:generate`, works under Deno) into `drizzle/`; applied via `deno task db:migrate`.
+- [x] Test helpers: per-test transaction rollback or template-DB reset; fake-data factories
+      — `withRollback` (transaction rollback) in `lib/db/test_util.ts`; faker factories in `lib/db/factories.ts`.
+- [x] Seed script with realistic fake data (faker), runnable via `deno task db:seed`
+      — deterministic (seeded faker), idempotent (onConflictDoNothing), refuses production.
+- [x] `FileStore` interface + S3-API implementation (works against MinIO and real S3); presigned upload/download URLs; tests against MinIO
+      — `lib/storage/filestore.ts` (AWS SDK v3, path-style); per-bucket instances (files/backups).
+- [x] `scripts/backup.sh`: `pg_dump` → versioned bucket (MinIO locally); `scripts/restore.sh`; automated test that backs up, drops, restores, verifies
+      — implemented in TypeScript instead of shell (`deno task db:backup` / `db:restore`, core in `lib/backup.ts`):
+      portable and directly testable. Full backup→data-loss→restore→verify cycle in `lib/backup_test.ts`;
+      requires pg_dump/pg_restore on PATH. Drill doc: `docs/backup-restore-drill.md`.
+- [x] Backup job wiring via `Deno.cron` (interval configurable; manual-trigger route in dev)
+      — `BACKUP_CRON_ENABLED` + `BACKUP_CRON` env knobs (schema-level defaults); `--unstable-cron` on the
+      start task; dev-only manual trigger `POST /api/dev/backup`. Discord failure alerts deferred to 3.3.
 
 ### 0.3 Crypto & tokens
 - [ ] AES-256-GCM field encryption helpers (encrypt/decrypt, key from env, versioned key id for future rotation) + tests incl. tamper detection

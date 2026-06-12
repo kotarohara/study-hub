@@ -78,6 +78,20 @@ Deno.test("invalid APP_ENV is rejected", () => {
   assert.throws(() => loadConfig({ APP_ENV: "staging" }), ConfigError);
 });
 
+Deno.test("backup knobs default in every environment", () => {
+  const dev = loadConfig({});
+  assert.equal(dev.BACKUP_CRON_ENABLED, false);
+  assert.equal(dev.BACKUP_CRON, "0 18 * * *");
+  assert.equal(
+    loadConfig({ BACKUP_CRON_ENABLED: "true" }).BACKUP_CRON_ENABLED,
+    true,
+  );
+  assert.throws(
+    () => loadConfig({ BACKUP_CRON_ENABLED: "banana" }),
+    ConfigError,
+  );
+});
+
 Deno.test("invalid SMTP_PORT is rejected", () => {
   assert.throws(() => loadConfig({ SMTP_PORT: "0" }), ConfigError);
   assert.throws(() => loadConfig({ SMTP_PORT: "notaport" }), ConfigError);

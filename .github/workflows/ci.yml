@@ -23,6 +23,9 @@ jobs:
       - name: Start local stack (Postgres, MinIO, Mailpit)
         run: deno task stack:up
 
+      - name: Run migrations
+        run: deno task db:migrate
+
       - name: Build
         run: deno task build
 
