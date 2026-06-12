@@ -176,7 +176,7 @@ Deno.test("MilestoneList: blocked badge, dep names, controls per role", () => {
         blocked: true,
       }]}
       byId={new Map([["m0", "IRB approval"], ["m1", "Start recruiting"]])}
-      canManage={true}
+      canManage
       owners={[]}
       addAction="/studies/s/milestones/add"
     />,
