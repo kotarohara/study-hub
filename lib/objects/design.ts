@@ -13,6 +13,7 @@ import {
   type Study,
 } from "../db/schema.ts";
 import { audit } from "../audit/log.ts";
+import { errorChainIncludes } from "../db/errors.ts";
 import { type AuditCtx, EDITABLE_STATES, StudyError } from "./studies.ts";
 import { type AssignmentStrategy, parseSequence } from "./assignment.ts";
 
@@ -123,7 +124,7 @@ export async function addCondition(
         .values({ studyId: opts.study.id, name, position: next })
         .returning();
     } catch (err) {
-      if (String(err).includes("conditions_study_name_unique")) {
+      if (errorChainIncludes(err, "conditions_study_name_unique")) {
         throw new StudyError(`A condition named "${name}" already exists.`);
       }
       throw err;
