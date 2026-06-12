@@ -1,6 +1,7 @@
 // Database schema (Drizzle). Keep this file free of Deno-specific imports —
 // drizzle-kit (Node-based) loads it directly when generating migrations.
 import {
+  date,
   index,
   integer,
   jsonb,
@@ -168,6 +169,15 @@ export const studies = pgTable("studies", {
   oversightPathway: oversightPathway("oversight_pathway")
     .notNull()
     .default("irb_reviewed"),
+  /** Required when irb_exempt: the IRB's exemption determination/reference. */
+  irbExemptionReference: text("irb_exemption_reference").notNull().default(""),
+  /** Required when internal_pilot: the PI's recorded justification. */
+  pilotJustification: text("pilot_justification").notNull().default(""),
+  // IRB approval metadata (spec §3.3): drives expiry warnings and the
+  // recruiting guard. Recorded by the PI; never copied on duplication.
+  irbProtocolNumber: text("irb_protocol_number").notNull().default(""),
+  irbApprovedOn: date("irb_approved_on", { mode: "date" }),
+  irbExpiresOn: date("irb_expires_on", { mode: "date" }),
   /** Status before archiving, so unarchive can restore it. */
   archivedFrom: studyStatus("archived_from"),
   // Structured design fields (spec §3.2, simplified editor). List-like

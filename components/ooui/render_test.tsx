@@ -12,6 +12,15 @@ import {
 } from "../../lib/ooui/collection.ts";
 import { resolveActions } from "../../lib/ooui/actions.ts";
 import { Stepper } from "./Stepper.tsx";
+import { PilotBanner } from "./PilotBanner.tsx";
+
+Deno.test("PilotBanner: loud, explicit, and machine-identifiable", () => {
+  const html = render(<PilotBanner />);
+  assert.ok(html.includes("Pilot — not IRB reviewed"));
+  assert.ok(html.includes("quarantined"));
+  assert.ok(html.includes("data-pilot-banner"));
+  assert.ok(html.includes("uppercase"));
+});
 
 Deno.test("Stepper: done/current/todo states", () => {
   const steps = ["draft", "irb_review", "recruiting", "running", "analysis"];

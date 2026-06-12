@@ -16,6 +16,13 @@ import {
   type DocumentKind,
   type NewVersionInput,
 } from "../../lib/objects/documents.ts";
+import {
+  isTemplateKind,
+  mergeFields,
+  renderTemplate,
+  STARTER_TEMPLATES,
+} from "../../lib/objects/templates.ts";
+import { listConditions } from "../../lib/objects/design.ts";
 import { Layout } from "../../components/Layout.tsx";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -25,6 +32,8 @@ interface Data {
   study: Study | null;
   error?: string;
   title?: string;
+  prefilledContent?: string;
+  prefilledKind?: string;
 }
 
 async function resolveTarget(
@@ -81,7 +90,24 @@ export const handler = define.handlers({
       ctx.url.searchParams.get("project") ?? "",
       ctx.url.searchParams.get("study") ?? "",
     );
-    return page<Data>(target);
+
+    // Template prefill (spec §3.3): merge fields are resolved from the
+    // study NOW, so the stored document text is concrete and never changes
+    // silently when the design does.
+    const template = ctx.url.searchParams.get("template") ?? "";
+    let prefilledContent: string | undefined;
+    let prefilledKind: string | undefined;
+    if (target.study && isTemplateKind(template)) {
+      const fields = mergeFields({
+        study: target.study,
+        project: target.project,
+        conditions: await listConditions(getDb(), target.study.id),
+      });
+      prefilledContent = renderTemplate(STARTER_TEMPLATES[template], fields)
+        .text;
+      prefilledKind = template;
+    }
+    return page<Data>({ ...target, prefilledContent, prefilledKind });
   },
   async POST(ctx) {
     const me = ctx.state.member!;
@@ -156,6 +182,25 @@ export default define.page<typeof handler>(({ data, state, url }) => (
       {data.study && (
         <input type="hidden" name="studyId" value={data.study.id} />
       )}
+      {data.study && (
+        <p class="text-xs text-gray-500">
+          Start from a template (merge fields filled from the study design):
+          {" "}
+          <a
+            href={`/documents/new?study=${data.study.id}&template=consent_form`}
+            class="text-brand-700 hover:underline"
+          >
+            consent form
+          </a>
+          {" · "}
+          <a
+            href={`/documents/new?study=${data.study.id}&template=irb_protocol`}
+            class="text-brand-700 hover:underline"
+          >
+            IRB protocol
+          </a>
+        </p>
+      )}
       <label class="flex flex-col gap-1 text-sm">
         Title
         <input
@@ -173,7 +218,9 @@ export default define.page<typeof handler>(({ data, state, url }) => (
           class="rounded-card border border-gray-300 px-3 py-2"
         >
           {DOCUMENT_KINDS.map((k) => (
-            <option key={k} value={k}>{k.replaceAll("_", " ")}</option>
+            <option key={k} value={k} selected={data.prefilledKind === k}>
+              {k.replaceAll("_", " ")}
+            </option>
           ))}
         </select>
       </label>
@@ -184,9 +231,10 @@ export default define.page<typeof handler>(({ data, state, url }) => (
         </span>
         <textarea
           name="content"
-          rows={8}
+          rows={data.prefilledContent ? 16 : 8}
           class="rounded-card border border-gray-300 px-3 py-2"
         >
+          {data.prefilledContent ?? ""}
         </textarea>
       </label>
       <label class="flex flex-col gap-1 text-sm">

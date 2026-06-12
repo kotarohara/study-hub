@@ -5,10 +5,13 @@ import {
   allowedTransitions,
   EDITABLE_STATES,
   getStudyFor,
+  isPilotStudy,
   STUDY_STEPS,
   type StudyStatus,
   type StudyWithProject,
 } from "../../../lib/objects/studies.ts";
+import { PilotBanner } from "../../../components/ooui/PilotBanner.tsx";
+import { irbExpiryStatus } from "../../../lib/objects/irb.ts";
 import { listConditions } from "../../../lib/objects/design.ts";
 import { listDocumentsOfStudy } from "../../../lib/objects/documents.ts";
 import type { Condition, Document } from "../../../lib/db/schema.ts";
@@ -88,10 +91,38 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         enabledIn: EDITABLE_STATES,
       },
       {
+        id: "pathway",
+        label: "Change pathway",
+        href: `/studies/${study.id}/pathway`,
+        method: "get",
+        minRole: "pi",
+        enabledIn: EDITABLE_STATES,
+      },
+      ...(study.oversightPathway === "irb_reviewed"
+        ? [{
+          id: "irb",
+          label: "Record IRB approval",
+          href: `/studies/${study.id}/irb`,
+          method: "get" as const,
+          minRole: "pi" as const,
+        }]
+        : []),
+      ...(isPilotStudy(study)
+        ? [{
+          id: "promote",
+          label: "Promote to full study",
+          href: `/studies/${study.id}/promote`,
+          tone: "primary" as const,
+          minRole: "researcher" as const,
+          confirm:
+            "Create an IRB-reviewed copy of this pilot's design? Pilot data never carries over.",
+        }]
+        : []),
+      {
         id: "duplicate",
         label: "Duplicate",
         href: `/studies/${study.id}/duplicate`,
-        minRole: "researcher",
+        minRole: isPilotStudy(study) ? "pi" : "researcher",
         confirm:
           "Duplicate this study? The design is copied into a new draft; participants and data never carry over.",
       },
@@ -144,20 +175,70 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             label: "Created",
             value: study.createdAt.toISOString().slice(0, 10),
           },
+          ...(study.irbProtocolNumber
+            ? [
+              { label: "IRB protocol", value: study.irbProtocolNumber },
+              {
+                label: "IRB approval",
+                value: `${
+                  study.irbApprovedOn?.toISOString().slice(0, 10) ?? "—"
+                } → ${study.irbExpiresOn?.toISOString().slice(0, 10) ?? "—"}`,
+              },
+            ]
+            : []),
         ]}
         tabs={TABS}
         activeTab={data.activeTab}
         baseHref={`/studies/${study.id}`}
         actions={actions}
       >
+        {isPilotStudy(study) && (
+          <div class="mb-4">
+            <PilotBanner />
+          </div>
+        )}
+        {(() => {
+          const expiry = irbExpiryStatus(study);
+          return (expiry === "expired" || expiry === "expiring_soon") && (
+            <div
+              class={`mb-4 rounded-card border px-4 py-2 text-sm font-medium ${
+                expiry === "expired"
+                  ? "border-red-300 bg-red-50 text-red-800"
+                  : "border-amber-300 bg-amber-50 text-amber-800"
+              }`}
+            >
+              {expiry === "expired"
+                ? `IRB approval EXPIRED on ${
+                  study.irbExpiresOn!.toISOString().slice(0, 10)
+                } — recruiting is blocked until renewal is recorded.`
+                : `IRB approval expires on ${
+                  study.irbExpiresOn!.toISOString().slice(0, 10)
+                } — plan the renewal.`}
+            </div>
+          );
+        })()}
         <div class="mb-4">
           <Stepper steps={STUDY_STEPS} current={study.status} />
         </div>
 
         {data.activeTab === "overview" && (
-          <p class="max-w-2xl whitespace-pre-wrap text-sm text-gray-700">
-            {study.description || "No description."}
-          </p>
+          <div class="max-w-2xl space-y-3">
+            <p class="whitespace-pre-wrap text-sm text-gray-700">
+              {study.description || "No description."}
+            </p>
+            {study.oversightPathway === "irb_exempt" && (
+              <p class="text-sm text-gray-600">
+                <span class="font-medium">IRB exemption reference:</span>{" "}
+                {study.irbExemptionReference}
+              </p>
+            )}
+            {isPilotStudy(study) && (
+              <p class="text-sm text-gray-600">
+                <span class="font-medium">PI justification:</span>{" "}
+                {study.pilotJustification}
+              </p>
+            )}
+          </div>
         )}
         {data.activeTab === "design" && (
           <div class="max-w-3xl space-y-4">

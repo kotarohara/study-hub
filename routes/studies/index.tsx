@@ -45,7 +45,23 @@ export const handler = define.handlers({
 });
 
 const COLUMNS: Column<StudyWithProject>[] = [
-  { id: "name", label: "Name", sortable: true, render: (r) => r.study.name },
+  {
+    id: "name",
+    label: "Name",
+    sortable: true,
+    // The pilot badge follows the study onto every view (spec §3.3).
+    render: (r) => (
+      <>
+        {r.study.name}
+        {r.study.oversightPathway === "internal_pilot" && (
+          <>
+            {" "}
+            <StatusBadge status="pilot" />
+          </>
+        )}
+      </>
+    ),
+  },
   {
     id: "project",
     label: "Project",

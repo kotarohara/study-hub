@@ -26,6 +26,7 @@ import {
   removeCondition,
   updateDesign,
 } from "./design.ts";
+import { grantApprovedConsent } from "./testing.ts";
 
 const EMPTY_DESIGN: DesignFields = {
   researchQuestions: "",
@@ -42,18 +43,24 @@ const EMPTY_DESIGN: DesignFields = {
 
 async function withStudy(
   fn: (
-    env: { researcher: Member; study: Study; project: Project },
+    env: {
+      researcher: Member;
+      pi: Member;
+      study: Study;
+      project: Project;
+    },
   ) => Promise<void>,
 ) {
   const db = await getTestDb();
   const suffix = crypto.randomUUID();
-  const [researcher] = await db
+  const [researcher, pi] = await db
     .insert(members)
     .values([
       fakeMember({
         email: `design-${suffix}@studyhub.local`,
         role: "researcher",
       }),
+      fakeMember({ email: `design-pi-${suffix}@studyhub.local`, role: "pi" }),
     ])
     .returning();
   const project = await createProject(db, {
@@ -67,10 +74,10 @@ async function withStudy(
     createdBy: researcher,
   });
   try {
-    await fn({ researcher, study, project });
+    await fn({ researcher, pi, study, project });
   } finally {
     await db.delete(projects).where(eq(projects.id, project.id));
-    await db.delete(members).where(inArray(members.id, [researcher.id]));
+    await db.delete(members).where(inArray(members.id, [researcher.id, pi.id]));
     await closeTestDb();
   }
 }
@@ -85,7 +92,7 @@ Deno.test("parseTargetN: empty → null, positive ints ok, junk rejected", () =>
 });
 
 Deno.test("updateDesign: saves fields, audited, gated by lifecycle", async () => {
-  await withStudy(async ({ researcher, study }) => {
+  await withStudy(async ({ researcher, pi, study, project }) => {
     const db = await getTestDb();
     const updated = await updateDesign(db, {
       study,
@@ -113,6 +120,12 @@ Deno.test("updateDesign: saves fields, audited, gated by lifecycle", async () =>
     assert.ok(entries.some((e) => e.action === "study.design_updated"));
 
     // Past irb_review the design is locked.
+    await grantApprovedConsent(db, {
+      project,
+      study: updated,
+      author: researcher,
+      pi,
+    });
     let locked = await transitionStudy(db, {
       study: updated,
       to: "irb_review",

@@ -230,7 +230,9 @@ export default define.page<typeof handler>(({ data, state, url }) => {
                   href={`/studies/${s.id}`}
                   icon="⚗"
                   label={s.name}
-                  sublabel={s.methodology.replaceAll("_", " ")}
+                  sublabel={(s.oversightPathway === "internal_pilot"
+                    ? "PILOT · "
+                    : "") + s.methodology.replaceAll("_", " ")}
                   status={s.status}
                 />
               ))}

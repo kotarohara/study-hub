@@ -176,9 +176,30 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       documents (latest version → fresh v1 draft). Routes: `/documents` collection, `new`,
       `[id]` (Content/Versions/Comments tabs), `diff`, `transition`, `versions/new`, `download`;
       Documents tabs on project + study detail; nav enabled. Comments: assistant+.
-- [ ] 1.6 Oversight pathway selector: IRB-reviewed / IRB-exempt (reference required) / Internal Pilot (PI confirmation + justification → audit log; permanent PILOT badge; pilot data-quarantine flag)
-- [ ] 1.7 IRB workflow: merge-field document templates from Study fields, approval metadata (protocol #, dates), expiry warnings, recruiting guard (blocked until approved consent Document)
-- [ ] 1.8 "Promote to full study" action (duplicate into fresh IRB-reviewed Study, zero data carry-over) + tests
+- [x] 1.6 Oversight pathway selector: IRB-reviewed / IRB-exempt (reference required) / Internal Pilot (PI confirmation + justification → audit log; permanent PILOT badge; pilot data-quarantine flag)
+      — `irb_exemption_reference` + `pilot_justification` columns (migration 0008);
+      `validatePathway` enforces the rules (exempt needs reference; pilot needs PI + justification,
+      both recorded in audit details). Selector on `/studies/new` (pilot option PI-only);
+      `/studies/[id]/pathway` PI-only change page, locked once past draft/irb_review ("Promote to
+      full study" in 1.8 is the way out after that). Duplicating a pilot is PI-only (it reproduces
+      the no-IRB declaration). PilotBanner on study detail + one-pager; pilot badge on the studies
+      collection and project-tab chips. `isPilotStudy()` is the quarantine flag for Phases 2/4
+      (screener block + dataset/export exclusion enforced there).
+- [x] 1.7 IRB workflow: merge-field document templates from Study fields, approval metadata (protocol #, dates), expiry warnings, recruiting guard (blocked until approved consent Document)
+      — `lib/objects/templates.ts`: `{{merge_field}}` rendering + built-in consent/protocol starter
+      templates; substitution happens when PREFILLING the editor (links on /documents/new with a
+      study context), so stored text never silently changes with the design. IRB metadata
+      (protocol #, approved/expires dates, migration 0009) recorded PI-only at /studies/[id]/irb,
+      audited, NOT copied on duplication. `irbExpiryStatus` drives detail-page warning banners
+      (30-day window); Discord/email expiry alerts arrive with jobs in 3.x. **Recruiting guard**
+      in transitionStudy: irb_reviewed studies need an APPROVED consent_form document AND an
+      unexpired IRB approval to enter recruiting (exempt/pilot unaffected).
+- [x] 1.8 "Promote to full study" action (duplicate into fresh IRB-reviewed Study, zero data carry-over) + tests
+      — `promoteToFullStudy` (pilots only, researcher+ since the result is the standard pathway):
+      shares `copyStudyTx` with duplicate; copies design/conditions/documents into a fresh
+      irb_reviewed draft named "… (full study)" with no pilot justification and no IRB metadata.
+      The pilot itself is untouched (archive it separately). Audited as `study.promoted`.
+      Primary action with confirm on pilot study detail pages.
 - [ ] 1.9 Milestones/Tasks: CRUD, dependencies + blocking, methodology templates
 - [ ] 1.10 TimelineGantt island + project roll-up calendar
 

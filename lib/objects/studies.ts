@@ -15,6 +15,7 @@ import {
   type Study,
 } from "../db/schema.ts";
 import { audit } from "../audit/log.ts";
+import { hasRole } from "../auth/roles.ts";
 import { getProjectFor, listProjectsFor } from "./projects.ts";
 
 export type StudyStatus = Study["status"];
@@ -64,6 +65,105 @@ export interface AuditCtx {
   ip?: string;
 }
 
+// ---------- Oversight pathway (spec §3.3) ----------
+
+export type OversightPathway = Study["oversightPathway"];
+
+export function isPilotStudy(study: Study): boolean {
+  return study.oversightPathway === "internal_pilot";
+}
+
+export interface PathwayInput {
+  pathway: OversightPathway;
+  exemptionReference?: string;
+  justification?: string;
+}
+
+/**
+ * Validates a pathway declaration (spec §3.3): IRB-exempt requires the
+ * exemption reference; Internal Pilot requires PI confirmation (the actor
+ * IS the PI) plus a recorded justification. StudyHub records the declared
+ * status; whether a pilot truly needs no review is the institution's call —
+ * which is exactly why the choice is PI-gated and audited.
+ */
+export function validatePathway(
+  input: PathwayInput,
+  actorRole: Member["role"],
+): { irbExemptionReference: string; pilotJustification: string } {
+  const reference = input.exemptionReference?.trim() ?? "";
+  const justification = input.justification?.trim() ?? "";
+
+  switch (input.pathway) {
+    case "irb_reviewed":
+      return { irbExemptionReference: "", pilotJustification: "" };
+    case "irb_exempt":
+      if (!reference) {
+        throw new StudyError(
+          "IRB-exempt studies require the exemption reference/determination.",
+        );
+      }
+      return { irbExemptionReference: reference, pilotJustification: "" };
+    case "internal_pilot":
+      if (!hasRole(actorRole, "pi")) {
+        throw new StudyError(
+          "Only the PI can declare an Internal Pilot (no IRB review).",
+        );
+      }
+      if (!justification) {
+        throw new StudyError(
+          "Internal Pilots require a short justification, recorded in the audit log.",
+        );
+      }
+      return { irbExemptionReference: "", pilotJustification: justification };
+  }
+}
+
+/** Changes the pathway of an existing study. PI-only, and only while the
+ * design is still editable — after that, "Promote to full study" (1.8) is
+ * the way out of a pilot. */
+export async function setOversightPathway(
+  db: Db,
+  opts: { study: Study; input: PathwayInput; actor: Member } & AuditCtx,
+): Promise<Study> {
+  if (!hasRole(opts.actor.role, "pi")) {
+    throw new StudyError("Only the PI can change the oversight pathway.");
+  }
+  if (!EDITABLE_STATES.includes(opts.study.status)) {
+    throw new StudyError(
+      `The pathway of a study in "${opts.study.status}" cannot be changed.`,
+    );
+  }
+  const fields = validatePathway(opts.input, opts.actor.role);
+  const [updated] = await db
+    .update(studies)
+    .set({
+      oversightPathway: opts.input.pathway,
+      ...fields,
+      updatedAt: new Date(),
+    })
+    .where(eq(studies.id, opts.study.id))
+    .returning();
+  await audit(db, {
+    action: "study.pathway_changed",
+    actorId: opts.actor.id,
+    objectType: "study",
+    objectId: opts.study.id,
+    details: {
+      from: opts.study.oversightPathway,
+      to: opts.input.pathway,
+      ...(fields.irbExemptionReference
+        ? { exemptionReference: fields.irbExemptionReference }
+        : {}),
+      ...(fields.pilotJustification
+        ? { justification: fields.pilotJustification }
+        : {}),
+    },
+    requestId: opts.requestId,
+    ip: opts.ip,
+  });
+  return updated;
+}
+
 export interface StudyWithProject {
   study: Study;
   project: Project;
@@ -104,6 +204,9 @@ export async function createStudy(
     name: string;
     description?: string;
     methodology: Methodology;
+    /** Oversight pathway declared at creation (spec §3.3); defaults to
+     * irb_reviewed. Internal Pilot requires the creator to be the PI. */
+    pathway?: PathwayInput;
     createdBy: Member;
   } & AuditCtx,
 ): Promise<Study> {
@@ -112,6 +215,8 @@ export async function createStudy(
   if (opts.project.status !== "active") {
     throw new StudyError("Studies cannot be added to an archived project.");
   }
+  const pathway: PathwayInput = opts.pathway ?? { pathway: "irb_reviewed" };
+  const pathwayFields = validatePathway(pathway, opts.createdBy.role);
 
   return await db.transaction(async (tx) => {
     const [study] = await tx
@@ -121,6 +226,8 @@ export async function createStudy(
         name,
         description: opts.description?.trim() ?? "",
         methodology: opts.methodology,
+        oversightPathway: pathway.pathway,
+        ...pathwayFields,
         createdBy: opts.createdBy.id,
       })
       .returning();
@@ -129,7 +236,17 @@ export async function createStudy(
       actorId: opts.createdBy.id,
       objectType: "study",
       objectId: study.id,
-      details: { projectId: opts.project.id, methodology: opts.methodology },
+      details: {
+        projectId: opts.project.id,
+        methodology: opts.methodology,
+        pathway: pathway.pathway,
+        ...(pathwayFields.pilotJustification
+          ? { justification: pathwayFields.pilotJustification }
+          : {}),
+        ...(pathwayFields.irbExemptionReference
+          ? { exemptionReference: pathwayFields.irbExemptionReference }
+          : {}),
+      },
       requestId: opts.requestId,
       ip: opts.ip,
     });
@@ -170,6 +287,30 @@ export async function updateStudy(
   return updated;
 }
 
+/** The recruiting guard (spec §3.3): an IRB-reviewed study may only start
+ * recruiting once an approved consent document exists, and not with a
+ * lapsed IRB approval. */
+async function assertMayRecruit(db: Db, study: Study): Promise<void> {
+  if (study.oversightPathway !== "irb_reviewed") return;
+  const approvedConsent = await db.query.documents.findFirst({
+    where: and(
+      eq(documents.studyId, study.id),
+      eq(documents.kind, "consent_form"),
+      eq(documents.reviewStatus, "approved"),
+    ),
+  });
+  if (!approvedConsent) {
+    throw new StudyError(
+      "Recruiting is blocked until this study has an APPROVED consent form document.",
+    );
+  }
+  if (study.irbExpiresOn && study.irbExpiresOn.getTime() < Date.now()) {
+    throw new StudyError(
+      "Recruiting is blocked: the IRB approval has expired. Record the renewed approval first.",
+    );
+  }
+}
+
 export async function transitionStudy(
   db: Db,
   opts: { study: Study; to: StudyStatus; actor: Member } & AuditCtx,
@@ -177,6 +318,9 @@ export async function transitionStudy(
   const from = opts.study.status;
   if (!TRANSITIONS[from].includes(opts.to)) {
     throw new StudyError(`Cannot move a study from "${from}" to "${opts.to}".`);
+  }
+  if (opts.to === "recruiting") {
+    await assertMayRecruit(db, opts.study);
   }
   const [updated] = await db
     .update(studies)
@@ -248,87 +392,119 @@ export async function unarchiveStudy(
   return updated;
 }
 
+/** Shared copy logic for duplicate/promote: design, conditions and
+ * study-attached documents (latest version → fresh v1 draft) — never
+ * participants, data, approvals or IRB metadata. */
+async function copyStudyTx(
+  tx: Parameters<Parameters<Db["transaction"]>[0]>[0],
+  source: Study,
+  overrides: {
+    name: string;
+    oversightPathway: Study["oversightPathway"];
+    irbExemptionReference: string;
+    pilotJustification: string;
+  },
+  actor: Member,
+): Promise<Study> {
+  const [copy] = await tx
+    .insert(studies)
+    .values({
+      projectId: source.projectId,
+      name: overrides.name,
+      description: source.description,
+      methodology: source.methodology,
+      oversightPathway: overrides.oversightPathway,
+      irbExemptionReference: overrides.irbExemptionReference,
+      pilotJustification: overrides.pilotJustification,
+      researchQuestions: source.researchQuestions,
+      hypotheses: source.hypotheses,
+      independentVariables: source.independentVariables,
+      dependentVariables: source.dependentVariables,
+      designType: source.designType,
+      targetN: source.targetN,
+      exclusionCriteria: source.exclusionCriteria,
+      counterbalancingScheme: source.counterbalancingScheme,
+      assignmentStrategy: source.assignmentStrategy,
+      assignmentSequence: source.assignmentSequence,
+      createdBy: actor.id,
+    })
+    .returning();
+  const sourceConditions = await tx
+    .select()
+    .from(conditions)
+    .where(eq(conditions.studyId, source.id));
+  if (sourceConditions.length > 0) {
+    await tx.insert(conditions).values(
+      sourceConditions.map((c) => ({
+        studyId: copy.id,
+        name: c.name,
+        position: c.position,
+      })),
+    );
+  }
+  // Copy study-attached documents: latest version becomes v1 of a fresh
+  // DRAFT document — approval status never carries over to a new study.
+  const sourceDocs = await tx
+    .select()
+    .from(documents)
+    .where(eq(documents.studyId, source.id));
+  for (const doc of sourceDocs) {
+    const latest = await tx.query.documentVersions.findFirst({
+      where: and(
+        eq(documentVersions.documentId, doc.id),
+        eq(documentVersions.versionNumber, doc.currentVersion),
+      ),
+    });
+    const [docCopy] = await tx
+      .insert(documents)
+      .values({
+        projectId: doc.projectId,
+        studyId: copy.id,
+        title: doc.title,
+        kind: doc.kind,
+        currentVersion: 1,
+        createdBy: actor.id,
+      })
+      .returning();
+    if (latest) {
+      await tx.insert(documentVersions).values({
+        documentId: docCopy.id,
+        versionNumber: 1,
+        content: latest.content,
+        fileKey: latest.fileKey, // immutable blob, safe to share
+        fileName: latest.fileName,
+        changeRationale: `Copied from study "${source.name}"`,
+        createdBy: actor.id,
+      });
+    }
+  }
+  return copy;
+}
+
 /**
  * Duplication is the primary path for "new study like the last one"
  * (spec §2.2 #6): copies the design — never participants or data — into a
- * fresh draft. Extend to copy documents (1.5) and milestones (1.9) as
- * those object types land.
+ * fresh draft. Extend to copy milestones (1.9) when those land.
  */
 export async function duplicateStudy(
   db: Db,
   opts: { study: Study; actor: Member } & AuditCtx,
 ): Promise<Study> {
+  // Duplicating a pilot reproduces its no-IRB declaration, so it carries the
+  // same PI gate as creating one. "Promote to full study" (1.8) is the path
+  // to an IRB-reviewed copy.
+  if (isPilotStudy(opts.study) && !hasRole(opts.actor.role, "pi")) {
+    throw new StudyError(
+      "Only the PI can duplicate an Internal Pilot. Use “Promote to full study” for an IRB-reviewed copy.",
+    );
+  }
   return await db.transaction(async (tx) => {
-    const [copy] = await tx
-      .insert(studies)
-      .values({
-        projectId: opts.study.projectId,
-        name: `${opts.study.name} (copy)`,
-        description: opts.study.description,
-        methodology: opts.study.methodology,
-        oversightPathway: opts.study.oversightPathway,
-        researchQuestions: opts.study.researchQuestions,
-        hypotheses: opts.study.hypotheses,
-        independentVariables: opts.study.independentVariables,
-        dependentVariables: opts.study.dependentVariables,
-        designType: opts.study.designType,
-        targetN: opts.study.targetN,
-        exclusionCriteria: opts.study.exclusionCriteria,
-        counterbalancingScheme: opts.study.counterbalancingScheme,
-        assignmentStrategy: opts.study.assignmentStrategy,
-        assignmentSequence: opts.study.assignmentSequence,
-        createdBy: opts.actor.id,
-      })
-      .returning();
-    const sourceConditions = await tx
-      .select()
-      .from(conditions)
-      .where(eq(conditions.studyId, opts.study.id));
-    if (sourceConditions.length > 0) {
-      await tx.insert(conditions).values(
-        sourceConditions.map((c) => ({
-          studyId: copy.id,
-          name: c.name,
-          position: c.position,
-        })),
-      );
-    }
-    // Copy study-attached documents: latest version becomes v1 of a fresh
-    // DRAFT document — approval status never carries over to a new study.
-    const sourceDocs = await tx
-      .select()
-      .from(documents)
-      .where(eq(documents.studyId, opts.study.id));
-    for (const doc of sourceDocs) {
-      const latest = await tx.query.documentVersions.findFirst({
-        where: and(
-          eq(documentVersions.documentId, doc.id),
-          eq(documentVersions.versionNumber, doc.currentVersion),
-        ),
-      });
-      const [docCopy] = await tx
-        .insert(documents)
-        .values({
-          projectId: doc.projectId,
-          studyId: copy.id,
-          title: doc.title,
-          kind: doc.kind,
-          currentVersion: 1,
-          createdBy: opts.actor.id,
-        })
-        .returning();
-      if (latest) {
-        await tx.insert(documentVersions).values({
-          documentId: docCopy.id,
-          versionNumber: 1,
-          content: latest.content,
-          fileKey: latest.fileKey, // immutable blob, safe to share
-          fileName: latest.fileName,
-          changeRationale: `Duplicated from study "${opts.study.name}"`,
-          createdBy: opts.actor.id,
-        });
-      }
-    }
+    const copy = await copyStudyTx(tx, opts.study, {
+      name: `${opts.study.name} (copy)`,
+      oversightPathway: opts.study.oversightPathway,
+      irbExemptionReference: opts.study.irbExemptionReference,
+      pilotJustification: opts.study.pilotJustification,
+    }, opts.actor);
     await audit(tx, {
       action: "study.duplicated",
       actorId: opts.actor.id,
@@ -339,6 +515,39 @@ export async function duplicateStudy(
       ip: opts.ip,
     });
     return copy;
+  });
+}
+
+/**
+ * "Promote to full study" (spec §3.3): duplicates an Internal Pilot's
+ * design into a fresh IRB-reviewed draft. Pilot data NEVER carries over —
+ * the copy starts with no enrollments, sessions or datasets, and no pilot
+ * flag. The pilot itself is left untouched (archive it separately).
+ */
+export async function promoteToFullStudy(
+  db: Db,
+  opts: { study: Study; actor: Member } & AuditCtx,
+): Promise<Study> {
+  if (!isPilotStudy(opts.study)) {
+    throw new StudyError("Only Internal Pilot studies can be promoted.");
+  }
+  return await db.transaction(async (tx) => {
+    const promoted = await copyStudyTx(tx, opts.study, {
+      name: `${opts.study.name} (full study)`,
+      oversightPathway: "irb_reviewed",
+      irbExemptionReference: "",
+      pilotJustification: "",
+    }, opts.actor);
+    await audit(tx, {
+      action: "study.promoted",
+      actorId: opts.actor.id,
+      objectType: "study",
+      objectId: promoted.id,
+      details: { sourceStudyId: opts.study.id },
+      requestId: opts.requestId,
+      ip: opts.ip,
+    });
+    return promoted;
   });
 }
 
