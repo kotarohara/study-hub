@@ -32,6 +32,11 @@ const TONES: Record<string, StatusTone> = {
   completed: "success",
   withdrawn: "warning",
   excluded: "danger",
+  // Milestones (spec §3.7) — "blocked" is derived, never stored
+  pending: "neutral",
+  in_progress: "info",
+  done: "success",
+  blocked: "danger",
   // Document review workflow (spec §3.3)
   internal_review: "info",
   submitted: "info",

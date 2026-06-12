@@ -12,9 +12,18 @@ import {
 } from "../../../lib/objects/studies.ts";
 import { PilotBanner } from "../../../components/ooui/PilotBanner.tsx";
 import { irbExpiryStatus } from "../../../lib/objects/irb.ts";
+import { hasRole } from "../../../lib/auth/roles.ts";
 import { listConditions } from "../../../lib/objects/design.ts";
 import { listDocumentsOfStudy } from "../../../lib/objects/documents.ts";
-import type { Condition, Document } from "../../../lib/db/schema.ts";
+import {
+  listMilestonesOfStudy,
+  type MilestoneWithMeta,
+} from "../../../lib/objects/milestones.ts";
+import { listProjectMembers } from "../../../lib/objects/projects.ts";
+import { MilestoneList } from "../../../components/ooui/MilestoneList.tsx";
+import TimelineGantt from "../../../islands/TimelineGantt.tsx";
+import { type GanttItem, ganttRange } from "../../../lib/ooui/gantt.ts";
+import type { Condition, Document, Member } from "../../../lib/db/schema.ts";
 import { Layout } from "../../../components/Layout.tsx";
 import { DetailView } from "../../../components/ooui/DetailView.tsx";
 import { Stepper } from "../../../components/ooui/Stepper.tsx";
@@ -30,12 +39,15 @@ interface Data {
   activeTab: string;
   conditions: Condition[];
   documents: Document[];
+  milestones: MilestoneWithMeta[];
+  team: Member[];
 }
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "design", label: "Design" },
   { id: "documents", label: "Documents" },
+  { id: "timeline", label: "Timeline" },
 ];
 
 const TRANSITION_LABELS: Partial<Record<StudyStatus, string>> = {
@@ -61,6 +73,12 @@ export const handler = define.handlers({
         : [],
       documents: activeTab === "documents"
         ? await listDocumentsOfStudy(getDb(), found.study.id)
+        : [],
+      milestones: activeTab === "timeline"
+        ? await listMilestonesOfStudy(getDb(), found.study.id)
+        : [],
+      team: activeTab === "timeline"
+        ? await listProjectMembers(getDb(), found.project.id)
         : [],
     });
   },
@@ -322,6 +340,56 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             >
               New document
             </a>
+          </div>
+        )}
+        {data.activeTab === "timeline" && (
+          <div class="space-y-4">
+            {(() => {
+              const items: GanttItem[] = data.milestones.map((m) => ({
+                id: m.milestone.id,
+                title: m.milestone.title,
+                start: m.milestone.startsOn?.toISOString().slice(0, 10) ??
+                  null,
+                due: m.milestone.dueOn?.toISOString().slice(0, 10) ?? null,
+                status: m.milestone.status,
+                blocked: m.blocked,
+              }));
+              const range = ganttRange(items);
+              return range && (
+                <TimelineGantt
+                  items={items}
+                  rangeStartIso={range.start.toISOString().slice(0, 10)}
+                  rangeDays={range.days}
+                  editable={hasRole(me.role, "researcher")}
+                />
+              );
+            })()}
+            {hasRole(me.role, "researcher") && (
+              <form
+                method="post"
+                action={`/studies/${study.id}/milestones/apply-template`}
+              >
+                <button
+                  type="submit"
+                  class="rounded-card border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+                >
+                  Apply {study.methodology.replaceAll("_", " ")}{" "}
+                  milestone template
+                </button>
+              </form>
+            )}
+            <MilestoneList
+              items={data.milestones}
+              byId={new Map(
+                data.milestones.map((
+                  m,
+                ) => [m.milestone.id, m.milestone.title]),
+              )}
+              canManage={hasRole(me.role, "researcher")}
+              owners={data.team}
+              addAction={`/studies/${study.id}/milestones/add`}
+              emptyMessage="No milestones yet — add one or apply the methodology template."
+            />
           </div>
         )}
       </DetailView>

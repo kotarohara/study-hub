@@ -320,6 +320,61 @@ export const documentComments = pgTable("document_comments", {
 
 export type DocumentComment = typeof documentComments.$inferSelect;
 
+// Milestones / Tasks (spec §2.1, §3.7): timeline items with owners, due
+// dates and dependencies; belong to a Study or to the Project itself.
+// "Blocked" is derived (an unfinished dependency), never stored.
+export const milestoneStatus = pgEnum("milestone_status", [
+  "pending",
+  "in_progress",
+  "done",
+]);
+
+export const milestones = pgTable("milestones", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  /** Null for project-level milestones. */
+  studyId: uuid("study_id").references(() => studies.id, {
+    onDelete: "cascade",
+  }),
+  title: text("title").notNull(),
+  notes: text("notes").notNull().default(""),
+  ownerId: uuid("owner_id").references(() => members.id, {
+    onDelete: "set null",
+  }),
+  startsOn: date("starts_on", { mode: "date" }),
+  dueOn: date("due_on", { mode: "date" }),
+  status: milestoneStatus("status").notNull().default("pending"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("milestones_project_idx").on(table.projectId),
+  index("milestones_study_idx").on(table.studyId),
+]);
+
+export type Milestone = typeof milestones.$inferSelect;
+
+export const milestoneDependencies = pgTable("milestone_dependencies", {
+  /** The milestone that is blocked … */
+  milestoneId: uuid("milestone_id")
+    .notNull()
+    .references(() => milestones.id, { onDelete: "cascade" }),
+  /** … until this one is done. */
+  dependsOnId: uuid("depends_on_id")
+    .notNull()
+    .references(() => milestones.id, { onDelete: "cascade" }),
+}, (table) => [
+  primaryKey({ columns: [table.milestoneId, table.dependsOnId] }),
+]);
+
 // Append-only audit log (spec §4: PII views/exports, consent changes,
 // deletions, payment approvals). Immutability is enforced in the database
 // by triggers (see migration 0002) — UPDATE/DELETE/TRUNCATE raise.

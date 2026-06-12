@@ -200,8 +200,24 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       irb_reviewed draft named "… (full study)" with no pilot justification and no IRB metadata.
       The pilot itself is untouched (archive it separately). Audited as `study.promoted`.
       Primary action with confirm on pilot study detail pages.
-- [ ] 1.9 Milestones/Tasks: CRUD, dependencies + blocking, methodology templates
-- [ ] 1.10 TimelineGantt island + project roll-up calendar
+- [x] 1.9 Milestones/Tasks: CRUD, dependencies + blocking, methodology templates
+      — `milestones` + `milestone_dependencies` (migration 0010): owner, start/due dates,
+      pending/in_progress/done; "blocked" is DERIVED (unfinished dependency), never stored.
+      Status changes refuse blocked milestones; dependencies are same-project only with pure
+      cycle detection (`wouldCreateCycle`, unit-tested). Per-methodology templates insert a
+      sequentially-dependent chain. Study Timeline tab (list + add + template button) and
+      project Timeline tab (roll-up incl. study milestones + project-level add); shared
+      `MilestoneList` component (render-tested). duplicateStudy copies the timeline (statuses
+      reset to pending, dependencies remapped). Deletes and status changes audited.
+      Status flips allowed for assistant+; structure changes researcher+.
+- [x] 1.10 TimelineGantt island + project roll-up calendar
+      — first client-side island (`islands/TimelineGantt.tsx`): milestones as bars on a
+      month-scaled axis (status colors, blocked ring, today marker, undated listed below) with
+      **drag-to-reschedule** (pointer events → whole-day snap → POST /milestones/[id]/reschedule
+      → reload); geometry is pure + unit-tested in `lib/ooui/gantt.ts`. Project Timeline tab adds
+      a server-rendered month calendar (Mon-based grid, prev/next via ?month=, due-dated
+      milestones link to their study) over the roll-up list; calendar math pure + unit-tested in
+      `lib/ooui/calendar.ts`. rescheduleMilestone is date-only with validation (integration test).
 
 ## Phase 2 — Participants & Recruitment
 
