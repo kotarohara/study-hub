@@ -23,17 +23,21 @@ import {
   unarchiveStudy,
   updateStudy,
 } from "./studies.ts";
+import { grantApprovedConsent } from "./testing.ts";
 
 async function withProject(
   fn: (env: {
     researcher: Member;
     outsider: Member;
+    pi: Member;
     project: Project;
+    /** Satisfies the recruiting guard for `study`. */
+    approveConsent: (study: import("../db/schema.ts").Study) => Promise<void>;
   }) => Promise<void>,
 ) {
   const db = await getTestDb();
   const suffix = crypto.randomUUID();
-  const [researcher, outsider] = await db
+  const [researcher, outsider, pi] = await db
     .insert(members)
     .values([
       fakeMember({
@@ -44,18 +48,21 @@ async function withProject(
         email: `study-out-${suffix}@studyhub.local`,
         role: "researcher",
       }),
+      fakeMember({ email: `study-pi-${suffix}@studyhub.local`, role: "pi" }),
     ])
     .returning();
   const project = await createProject(db, {
     name: `study-test-${suffix}`,
     createdBy: researcher,
   });
+  const approveConsent = (study: import("../db/schema.ts").Study) =>
+    grantApprovedConsent(db, { project, study, author: researcher, pi });
   try {
-    await fn({ researcher, outsider, project });
+    await fn({ researcher, outsider, pi, project, approveConsent });
   } finally {
     await db.delete(projects).where(eq(projects.id, project.id));
     await db.delete(members).where(
-      inArray(members.id, [researcher.id, outsider.id]),
+      inArray(members.id, [researcher.id, outsider.id, pi.id]),
     );
     await closeTestDb();
   }
@@ -130,7 +137,7 @@ Deno.test("visibility follows the parent project", async () => {
 });
 
 Deno.test("lifecycle: valid path works, invalid jumps are refused, audited", async () => {
-  await withProject(async ({ researcher, project }) => {
+  await withProject(async ({ researcher, project, approveConsent }) => {
     const db = await getTestDb();
     let study = await createStudy(db, {
       project,
@@ -138,6 +145,7 @@ Deno.test("lifecycle: valid path works, invalid jumps are refused, audited", asy
       methodology: "lab_experiment",
       createdBy: researcher,
     });
+    await approveConsent(study);
 
     // draft cannot jump straight to running.
     await assert.rejects(
@@ -192,7 +200,7 @@ Deno.test("irb_review can return to draft for revisions", async () => {
 });
 
 Deno.test("edit allowed in draft/irb_review only", async () => {
-  await withProject(async ({ researcher, project }) => {
+  await withProject(async ({ researcher, project, approveConsent }) => {
     const db = await getTestDb();
     let study = await createStudy(db, {
       project,
@@ -200,6 +208,7 @@ Deno.test("edit allowed in draft/irb_review only", async () => {
       methodology: "survey",
       createdBy: researcher,
     });
+    await approveConsent(study);
     study = await updateStudy(db, {
       study,
       name: "Edited",
@@ -232,7 +241,7 @@ Deno.test("edit allowed in draft/irb_review only", async () => {
 });
 
 Deno.test("archive from any state; unarchive restores it", async () => {
-  await withProject(async ({ researcher, project }) => {
+  await withProject(async ({ researcher, project, approveConsent }) => {
     const db = await getTestDb();
     let study = await createStudy(db, {
       project,
@@ -240,6 +249,7 @@ Deno.test("archive from any state; unarchive restores it", async () => {
       methodology: "survey",
       createdBy: researcher,
     });
+    await approveConsent(study);
     study = await transitionStudy(db, {
       study,
       to: "irb_review",
@@ -266,7 +276,7 @@ Deno.test("archive from any state; unarchive restores it", async () => {
 });
 
 Deno.test("duplicate: copies design into a fresh draft, audited", async () => {
-  await withProject(async ({ researcher, project }) => {
+  await withProject(async ({ researcher, project, approveConsent }) => {
     const db = await getTestDb();
     let original = await createStudy(db, {
       project,
@@ -275,6 +285,7 @@ Deno.test("duplicate: copies design into a fresh draft, audited", async () => {
       methodology: "crowdsourcing",
       createdBy: researcher,
     });
+    await approveConsent(original);
     original = await transitionStudy(db, {
       study: original,
       to: "irb_review",
@@ -302,5 +313,39 @@ Deno.test("duplicate: copies design into a fresh draft, audited", async () => {
       .where(eq(auditLog.objectId, copy.id));
     assert.equal(entry.action, "study.duplicated");
     assert.equal(entry.details?.sourceStudyId, original.id);
+  });
+});
+
+Deno.test("recruiting guard: blocked without an approved consent document", async () => {
+  await withProject(async ({ researcher, project, approveConsent }) => {
+    const db = await getTestDb();
+    let study = await createStudy(db, {
+      project,
+      name: "Guarded",
+      methodology: "survey",
+      createdBy: researcher,
+    });
+    study = await transitionStudy(db, {
+      study,
+      to: "irb_review",
+      actor: researcher,
+    });
+
+    await assert.rejects(
+      () => transitionStudy(db, { study, to: "recruiting", actor: researcher }),
+      (err: unknown) => {
+        assert.ok(err instanceof StudyError);
+        assert.match(err.message, /APPROVED consent/);
+        return true;
+      },
+    );
+
+    await approveConsent(study);
+    study = await transitionStudy(db, {
+      study,
+      to: "recruiting",
+      actor: researcher,
+    });
+    assert.equal(study.status, "recruiting");
   });
 });

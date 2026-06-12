@@ -185,7 +185,15 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       the no-IRB declaration). PilotBanner on study detail + one-pager; pilot badge on the studies
       collection and project-tab chips. `isPilotStudy()` is the quarantine flag for Phases 2/4
       (screener block + dataset/export exclusion enforced there).
-- [ ] 1.7 IRB workflow: merge-field document templates from Study fields, approval metadata (protocol #, dates), expiry warnings, recruiting guard (blocked until approved consent Document)
+- [x] 1.7 IRB workflow: merge-field document templates from Study fields, approval metadata (protocol #, dates), expiry warnings, recruiting guard (blocked until approved consent Document)
+      — `lib/objects/templates.ts`: `{{merge_field}}` rendering + built-in consent/protocol starter
+      templates; substitution happens when PREFILLING the editor (links on /documents/new with a
+      study context), so stored text never silently changes with the design. IRB metadata
+      (protocol #, approved/expires dates, migration 0009) recorded PI-only at /studies/[id]/irb,
+      audited, NOT copied on duplication. `irbExpiryStatus` drives detail-page warning banners
+      (30-day window); Discord/email expiry alerts arrive with jobs in 3.x. **Recruiting guard**
+      in transitionStudy: irb_reviewed studies need an APPROVED consent_form document AND an
+      unexpired IRB approval to enter recruiting (exempt/pilot unaffected).
 - [ ] 1.8 "Promote to full study" action (duplicate into fresh IRB-reviewed Study, zero data carry-over) + tests
 - [ ] 1.9 Milestones/Tasks: CRUD, dependencies + blocking, methodology templates
 - [ ] 1.10 TimelineGantt island + project roll-up calendar

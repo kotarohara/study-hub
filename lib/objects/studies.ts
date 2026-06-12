@@ -287,6 +287,30 @@ export async function updateStudy(
   return updated;
 }
 
+/** The recruiting guard (spec §3.3): an IRB-reviewed study may only start
+ * recruiting once an approved consent document exists, and not with a
+ * lapsed IRB approval. */
+async function assertMayRecruit(db: Db, study: Study): Promise<void> {
+  if (study.oversightPathway !== "irb_reviewed") return;
+  const approvedConsent = await db.query.documents.findFirst({
+    where: and(
+      eq(documents.studyId, study.id),
+      eq(documents.kind, "consent_form"),
+      eq(documents.reviewStatus, "approved"),
+    ),
+  });
+  if (!approvedConsent) {
+    throw new StudyError(
+      "Recruiting is blocked until this study has an APPROVED consent form document.",
+    );
+  }
+  if (study.irbExpiresOn && study.irbExpiresOn.getTime() < Date.now()) {
+    throw new StudyError(
+      "Recruiting is blocked: the IRB approval has expired. Record the renewed approval first.",
+    );
+  }
+}
+
 export async function transitionStudy(
   db: Db,
   opts: { study: Study; to: StudyStatus; actor: Member } & AuditCtx,
@@ -294,6 +318,9 @@ export async function transitionStudy(
   const from = opts.study.status;
   if (!TRANSITIONS[from].includes(opts.to)) {
     throw new StudyError(`Cannot move a study from "${from}" to "${opts.to}".`);
+  }
+  if (opts.to === "recruiting") {
+    await assertMayRecruit(db, opts.study);
   }
   const [updated] = await db
     .update(studies)

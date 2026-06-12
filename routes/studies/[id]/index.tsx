@@ -11,6 +11,7 @@ import {
   type StudyWithProject,
 } from "../../../lib/objects/studies.ts";
 import { PilotBanner } from "../../../components/ooui/PilotBanner.tsx";
+import { irbExpiryStatus } from "../../../lib/objects/irb.ts";
 import { listConditions } from "../../../lib/objects/design.ts";
 import { listDocumentsOfStudy } from "../../../lib/objects/documents.ts";
 import type { Condition, Document } from "../../../lib/db/schema.ts";
@@ -97,6 +98,15 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         minRole: "pi",
         enabledIn: EDITABLE_STATES,
       },
+      ...(study.oversightPathway === "irb_reviewed"
+        ? [{
+          id: "irb",
+          label: "Record IRB approval",
+          href: `/studies/${study.id}/irb`,
+          method: "get" as const,
+          minRole: "pi" as const,
+        }]
+        : []),
       {
         id: "duplicate",
         label: "Duplicate",
@@ -154,6 +164,17 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             label: "Created",
             value: study.createdAt.toISOString().slice(0, 10),
           },
+          ...(study.irbProtocolNumber
+            ? [
+              { label: "IRB protocol", value: study.irbProtocolNumber },
+              {
+                label: "IRB approval",
+                value: `${
+                  study.irbApprovedOn?.toISOString().slice(0, 10) ?? "—"
+                } → ${study.irbExpiresOn?.toISOString().slice(0, 10) ?? "—"}`,
+              },
+            ]
+            : []),
         ]}
         tabs={TABS}
         activeTab={data.activeTab}
@@ -165,6 +186,26 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             <PilotBanner />
           </div>
         )}
+        {(() => {
+          const expiry = irbExpiryStatus(study);
+          return (expiry === "expired" || expiry === "expiring_soon") && (
+            <div
+              class={`mb-4 rounded-card border px-4 py-2 text-sm font-medium ${
+                expiry === "expired"
+                  ? "border-red-300 bg-red-50 text-red-800"
+                  : "border-amber-300 bg-amber-50 text-amber-800"
+              }`}
+            >
+              {expiry === "expired"
+                ? `IRB approval EXPIRED on ${
+                  study.irbExpiresOn!.toISOString().slice(0, 10)
+                } — recruiting is blocked until renewal is recorded.`
+                : `IRB approval expires on ${
+                  study.irbExpiresOn!.toISOString().slice(0, 10)
+                } — plan the renewal.`}
+            </div>
+          );
+        })()}
         <div class="mb-4">
           <Stepper steps={STUDY_STEPS} current={study.status} />
         </div>
