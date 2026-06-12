@@ -262,7 +262,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       random-balanced or manual sequence per design, pilot enrollments balanced separately,
       one audit event per assignment. Participant "History" tab + instrument "Usage" tab filled
       in. "Record consent" stays a manual transition until the consent flow (2.6).
-- [ ] 2.6 Consent flow: page rendered from approved Document version, e-signature (encrypted), consent-to-recontact flag, re-consent on amendment
+- [x] 2.6 Consent flow: page rendered from approved Document version, e-signature (encrypted), consent-to-recontact flag, re-consent on amendment
+      `consents` rows pin (document, version); history immutable — amendments (new APPROVED
+      version) flip status to "outdated" and re-consent inserts a new row. Participant page
+      `p/[token]/consent` via purpose-scoped expiring magic link (14 days; rate-limited; no
+      Turnstile — not an open form); typed-name e-signature encrypted at rest; first consent
+      auto-advances eligible→consented in the same transaction; both audit events actorId null.
+      Lab side: consent column + link issuance (audited) on the Participants tab; links shown
+      for manual copy until messaging (3.x) delivers them. ⚠ File-only consent documents can't
+      render on the participant page (text content only) — upload-based consent forms need the
+      file route made participant-safe later.
 - [ ] 2.7 Recruitment funnel stats per channel + quota dashboard (per-stratum counts vs targets; manual pause)
 - [ ] 2.8 Re-recruitment: pool filtering + bulk invites via preferred ContactChannel
 

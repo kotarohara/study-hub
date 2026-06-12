@@ -9,6 +9,7 @@ import {
   type EnrollmentStatus,
   isTerminal,
 } from "../lib/objects/enrollments.ts";
+import type { ConsentStatus } from "../lib/objects/consents.ts";
 import { isPilotStudy } from "../lib/objects/studies.ts";
 import { StatusBadge } from "./ooui/StatusBadge.tsx";
 
@@ -23,6 +24,38 @@ const TRANSITION_LABELS: Record<EnrollmentStatus, string> = {
 };
 
 const EXIT_STATES: EnrollmentStatus[] = ["withdrawn", "excluded"];
+
+function ConsentCell(props: {
+  status: ConsentStatus | undefined;
+  enrollmentId: string;
+  enrollmentStatus: EnrollmentStatus;
+  canOperate: boolean;
+}) {
+  if (!props.status || props.status === "no_document") {
+    return <span class="text-gray-400">—</span>;
+  }
+  const needsLink = props.status !== "current" &&
+    ["eligible", "consented", "active"].includes(props.enrollmentStatus);
+  return (
+    <span class="inline-flex items-center gap-1.5">
+      <StatusBadge
+        status={props.status === "current"
+          ? "consent_current"
+          : props.status === "outdated"
+          ? "consent_outdated"
+          : "consent_missing"}
+      />
+      {props.canOperate && needsLink && (
+        <a
+          href={`/enrollments/${props.enrollmentId}/consent-link`}
+          class="text-xs text-brand-700 hover:underline"
+        >
+          link
+        </a>
+      )}
+    </span>
+  );
+}
 
 function TransitionButtons(props: { row: EnrollmentRow }) {
   const { enrollment } = props.row;
@@ -62,6 +95,8 @@ export function EnrollmentPanel(props: {
   rows: EnrollmentRow[];
   /** Pool participants not yet enrolled (assistant+ only, else empty). */
   pool: Participant[];
+  /** Consent status per enrollment id (spec §4 kept-feature 1). */
+  consent: Map<string, ConsentStatus>;
   canOperate: boolean;
   canPilotToggle: boolean;
 }) {
@@ -84,6 +119,7 @@ export function EnrollmentPanel(props: {
               <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
                 <th class="py-2 pr-4">Participant</th>
                 <th class="py-2 pr-4">Status</th>
+                <th class="py-2 pr-4">Consent</th>
                 <th class="py-2 pr-4">Condition</th>
                 <th class="py-2 pr-4">Enrolled</th>
                 {props.canOperate && <th class="py-2">Actions</th>}
@@ -107,6 +143,14 @@ export function EnrollmentPanel(props: {
                   </td>
                   <td class="py-2 pr-4">
                     <StatusBadge status={row.enrollment.status} />
+                  </td>
+                  <td class="py-2 pr-4">
+                    <ConsentCell
+                      status={props.consent.get(row.enrollment.id)}
+                      enrollmentId={row.enrollment.id}
+                      enrollmentStatus={row.enrollment.status}
+                      canOperate={props.canOperate}
+                    />
                   </td>
                   <td class="py-2 pr-4">
                     {row.conditionName ??

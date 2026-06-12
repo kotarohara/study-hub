@@ -35,6 +35,10 @@ import {
 } from "../../../lib/objects/enrollments.ts";
 import { listParticipants } from "../../../lib/objects/participants.ts";
 import { EnrollmentPanel } from "../../../components/EnrollmentPanel.tsx";
+import {
+  type ConsentStatus,
+  consentStatusOfStudy,
+} from "../../../lib/objects/consents.ts";
 import { audit } from "../../../lib/audit/log.ts";
 import { clientHost } from "../../../lib/auth/limiters.ts";
 import { Layout } from "../../../components/Layout.tsx";
@@ -56,6 +60,7 @@ interface Data {
   team: Member[];
   enrollmentRows: EnrollmentRow[];
   pool: Participant[];
+  consent: [string, ConsentStatus][];
 }
 
 const TABS = [
@@ -81,6 +86,9 @@ export const handler = define.handlers({
     const activeTab = TABS.some((t) => t.id === ctx.url.searchParams.get("tab"))
       ? ctx.url.searchParams.get("tab")!
       : "overview";
+    const enrollmentRows = activeTab === "participants"
+      ? await listEnrollmentsOfStudy(getDb(), found.study.id)
+      : [];
     return page<Data>({
       found,
       activeTab,
@@ -96,9 +104,7 @@ export const handler = define.handlers({
       team: activeTab === "timeline"
         ? await listProjectMembers(getDb(), found.project.id)
         : [],
-      enrollmentRows: activeTab === "participants"
-        ? await listEnrollmentsOfStudy(getDb(), found.study.id)
-        : [],
+      enrollmentRows,
       pool: activeTab === "participants"
         ? await loadEnrollablePool({
           member: ctx.state.member!,
@@ -106,6 +112,13 @@ export const handler = define.handlers({
           requestId: ctx.state.requestId,
           ip: clientHost(ctx.info),
         })
+        : [],
+      consent: activeTab === "participants"
+        ? [...(await consentStatusOfStudy(
+          getDb(),
+          found.study,
+          enrollmentRows.map((r) => r.enrollment),
+        )).entries()]
         : [],
     });
   },
@@ -415,6 +428,7 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             study={study}
             rows={data.enrollmentRows}
             pool={data.pool}
+            consent={new Map(data.consent)}
             canOperate={hasRole(me.role, "assistant")}
             canPilotToggle={hasRole(me.role, "researcher")}
           />

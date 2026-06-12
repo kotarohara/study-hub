@@ -52,6 +52,10 @@ const TONES: Record<string, StatusTone> = {
   // Screeners (spec §3.4)
   open: "success",
   paused: "warning",
+  // Consent status per enrollment (spec §4 kept-feature 1)
+  consent_current: "success",
+  consent_outdated: "warning",
+  consent_missing: "neutral",
   // Participants (spec §3.4) — do-not-contact is deliberately loud
   do_not_contact: "danger",
   preferred: "info",

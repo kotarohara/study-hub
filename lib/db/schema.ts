@@ -552,6 +552,37 @@ export const screenerResponses = pgTable("screener_responses", {
 
 export type ScreenerResponse = typeof screenerResponses.$inferSelect;
 
+// Consents (spec §4 kept-feature 1): a participant's signed agreement to
+// a specific APPROVED version of the study's consent Document. Amendments
+// (new approved versions) leave old rows intact and outdated — re-consent
+// inserts a new row, so the history of what was agreed to is immutable.
+export const consents = pgTable("consents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  enrollmentId: uuid("enrollment_id")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  documentId: uuid("document_id")
+    .notNull()
+    .references(() => documents.id),
+  documentVersionNumber: integer("document_version_number").notNull(),
+  /** PII: typed-name e-signature (encrypted at rest). */
+  signatureName: encryptedText("signature_name").notNull(),
+  /** May we contact this person about future studies? (spec §4 #1) */
+  consentToRecontact: boolean("consent_to_recontact").notNull().default(false),
+  signedAt: timestamp("signed_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("consents_enrollment_version_unique").on(
+    table.enrollmentId,
+    table.documentId,
+    table.documentVersionNumber,
+  ),
+  index("consents_enrollment_idx").on(table.enrollmentId),
+]);
+
+export type Consent = typeof consents.$inferSelect;
+
 // Milestones / Tasks (spec §2.1, §3.7): timeline items with owners, due
 // dates and dependencies; belong to a Study or to the Project itself.
 // "Blocked" is derived (an unfinished dependency), never stored.
