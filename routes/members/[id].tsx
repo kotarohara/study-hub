@@ -7,7 +7,10 @@ import {
   auditLog,
   type Member,
   members,
+  type Project,
 } from "../../lib/db/schema.ts";
+import { listProjectsOfMember } from "../../lib/objects/projects.ts";
+import { Chip } from "../../components/ooui/Chip.tsx";
 import { Layout } from "../../components/Layout.tsx";
 import { DetailView } from "../../components/ooui/DetailView.tsx";
 import { resolveActions } from "../../lib/ooui/actions.ts";
@@ -16,6 +19,7 @@ interface Data {
   subject: Member;
   activeTab: string;
   activity: AuditEntry[];
+  subjectProjects: Project[];
 }
 
 const TABS = [
@@ -44,7 +48,11 @@ export const handler = define.handlers({
         .limit(20)
       : [];
 
-    return page<Data>({ subject, activeTab, activity });
+    const subjectProjects = activeTab === "overview"
+      ? await listProjectsOfMember(db, subject.id)
+      : [];
+
+    return page<Data>({ subject, activeTab, activity, subjectProjects });
   },
 });
 
@@ -96,10 +104,21 @@ export default define.page<typeof handler>(({ data, state, url }) => {
       >
         {data.activeTab === "overview"
           ? (
-            <p class="text-sm text-gray-600">
-              Projects and studies this member belongs to will appear here
-              (Phase 1).
-            </p>
+            data.subjectProjects.length === 0
+              ? <p class="text-sm text-gray-500">Not on any projects yet.</p>
+              : (
+                <div class="flex flex-wrap gap-2">
+                  {data.subjectProjects.map((p) => (
+                    <Chip
+                      key={p.id}
+                      href={`/projects/${p.id}`}
+                      icon="▣"
+                      label={p.name}
+                      status={p.status}
+                    />
+                  ))}
+                </div>
+              )
           )
           : data.activity.length === 0
           ? <p class="text-sm text-gray-500">No recorded activity.</p>

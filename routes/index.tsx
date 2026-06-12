@@ -5,15 +5,19 @@ import { members } from "../lib/db/schema.ts";
 import { count } from "drizzle-orm";
 import { Layout } from "../components/Layout.tsx";
 import { NAV_ITEMS } from "../lib/ooui/nav.ts";
+import { listProjectsFor } from "../lib/objects/projects.ts";
 
 interface Data {
   memberCount: number;
+  projectCount: number;
 }
 
 export const handler = define.handlers({
-  async GET() {
-    const [row] = await getDb().select({ value: count() }).from(members);
-    return page<Data>({ memberCount: row.value });
+  async GET(ctx) {
+    const db = getDb();
+    const [row] = await db.select({ value: count() }).from(members);
+    const visible = await listProjectsFor(db, ctx.state.member!);
+    return page<Data>({ memberCount: row.value, projectCount: visible.length });
   },
 });
 
@@ -36,6 +40,10 @@ export default define.page<typeof handler>(({ data, state, url }) => (
           <p class="text-sm text-gray-500">
             {item.id === "members"
               ? `${data.memberCount} member${data.memberCount === 1 ? "" : "s"}`
+              : item.id === "projects"
+              ? `${data.projectCount} project${
+                data.projectCount === 1 ? "" : "s"
+              }`
               : item.enabled
               ? ""
               : "Coming soon"}

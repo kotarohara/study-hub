@@ -130,11 +130,52 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 1 — Studies & Documents
 
-- [ ] 1.1 Project CRUD + membership (collection/detail views, archive)
-- [ ] 1.2 Study CRUD: lifecycle states (draft → IRB review → recruiting → running → analysis → archived) + stepper; state-gated actions; duplication (design + docs + timeline, minus participants/data)
-- [ ] 1.3 Design editor: structured fields (RQs, hypotheses, IVs/DVs, conditions, design type, target N, exclusion criteria) + one-pager render
-- [ ] 1.4 Condition assignment engine: random + manual counterbalanced assignment with audit trail + tests
-- [ ] 1.5 Documents: upload/create, version history + diff, review statuses, reviewer comments
+- [x] 1.1 Project CRUD + membership (collection/detail views, archive)
+      — `projects` + `project_members` tables (migration 0003); domain logic in `lib/objects/projects.ts`
+      with visibility rules (PI sees all, others only assigned projects) and audited mutations
+      (create/update/archive/unarchive/member add+remove — membership changes are idempotent and
+      only audit real changes). Routes: `/projects` collection, `/projects/new`, `/projects/[id]`
+      (Overview/Members/Studies tabs; Members tab has chip list + add/remove for researcher+),
+      `/projects/[id]/edit`, archive/unarchive POSTs. Archive makes the project read-only (edit and
+      membership changes are refused at both the action-gating and handler level). Member detail
+      Overview now shows the member's project chips. Creator auto-joins their project. Seed adds an
+      "Example Project". Project create permission: researcher+.
+- [x] 1.2 Study CRUD: lifecycle states (draft → IRB review → recruiting → running → analysis → archived) + stepper; state-gated actions; duplication (design + docs + timeline, minus participants/data)
+      — `studies` table (migration 0004) with methodology + `oversight_pathway` column (creation
+      locked to irb_reviewed until the 1.6 selector) + `archived_from` (unarchive restores the
+      prior state). Explicit, audited transition map in `lib/objects/studies.ts`; edit only in
+      draft/irb_review; archive from any state; duplication copies the design into a fresh draft —
+      extend `duplicateStudy` to copy documents (1.5) and milestones (1.9) when those land.
+      Stepper component renders the lifecycle. Routes: `/studies`, `/studies/new?project=`,
+      `/studies/[id]` (+ edit/transition/duplicate/archive/unarchive); project Studies tab live.
+      ⚠ 1.7 must add the recruiting guard (approved consent Document) to the transition map.
+- [x] 1.3 Design editor: structured fields (RQs, hypotheses, IVs/DVs, conditions, design type, target N, exclusion criteria) + one-pager render
+      — design columns on `studies` (+ `counterbalancing_scheme` text per spec's Latin-square cut)
+      and a `conditions` table (ordered, unique names per study; 1.4 assigns enrollments to these)
+      — migration 0005. `lib/objects/design.ts`: updateDesign + condition add/remove, all gated to
+      draft/irb_review and audited; duplicateStudy now copies design fields and conditions.
+      Editor at `/studies/[id]/design` (list fields newline-separated); print-friendly one-pager
+      at `/studies/[id]/onepager`; Design tab shows the summary.
+- [x] 1.4 Condition assignment engine: random + manual counterbalanced assignment with audit trail + tests
+      — engine is a pure, storage-free module (`lib/objects/assignment.ts`): balanced random
+      (uniform among least-assigned → group sizes never differ by >1, injectable RNG) and manual
+      counterbalanced sequences (validated names, cycled from a cursor). Per-study config
+      (`assignment_strategy` + `assignment_sequence`, migration 0006) is part of the design
+      (audited via design_updated, copied on duplicate, manual sequences validated at save);
+      design editor has the selector + a seeded preview of upcoming assignments.
+      ⚠ Deliberate deferral: Enrollments don't exist until Phase 2, so assignment-of-enrollment
+      rows + per-assignment audit events are wired in **2.5** using this engine — no premature
+      enrollment stub table was created.
+- [x] 1.5 Documents: upload/create, version history + diff, review statuses, reviewer comments
+      — `documents` + `document_versions` + `document_comments` (migration 0007). Versions are
+      in-app text (diffable, LCS line diff in `lib/objects/diff.ts`) OR uploaded files (FileStore,
+      10 MB cap, presigned download). Review workflow draft → internal_review → submitted →
+      approved/revisions_requested with an explicit transition map; **recording approval is
+      PI-only** (it will gate recruiting in 1.7); adding a version requires a change rationale and
+      resets status to draft — approval never carries over. duplicateStudy copies study-attached
+      documents (latest version → fresh v1 draft). Routes: `/documents` collection, `new`,
+      `[id]` (Content/Versions/Comments tabs), `diff`, `transition`, `versions/new`, `download`;
+      Documents tabs on project + study detail; nav enabled. Comments: assistant+.
 - [ ] 1.6 Oversight pathway selector: IRB-reviewed / IRB-exempt (reference required) / Internal Pilot (PI confirmation + justification → audit log; permanent PILOT badge; pilot data-quarantine flag)
 - [ ] 1.7 IRB workflow: merge-field document templates from Study fields, approval metadata (protocol #, dates), expiry warnings, recruiting guard (blocked until approved consent Document)
 - [ ] 1.8 "Promote to full study" action (duplicate into fresh IRB-reviewed Study, zero data carry-over) + tests

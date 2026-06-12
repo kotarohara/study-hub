@@ -22,6 +22,41 @@
       "when": 1781239517206,
       "tag": "0002_white_justin_hammer",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781258129838,
+      "tag": "0003_slow_domino",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781258591893,
+      "tag": "0004_illegal_thunderbolt_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781260999637,
+      "tag": "0005_mysterious_yellow_claw",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781261557364,
+      "tag": "0006_absent_klaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781264079137,
+      "tag": "0007_broad_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

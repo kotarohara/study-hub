@@ -16,14 +16,14 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Projects",
     href: "/projects",
     icon: "▣",
-    enabled: false, // Phase 1.1
+    enabled: true,
   },
   {
     id: "studies",
     label: "Studies",
     href: "/studies",
     icon: "⚗",
-    enabled: false, // Phase 1.2
+    enabled: true,
   },
   {
     id: "participants",
@@ -44,7 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Documents",
     href: "/documents",
     icon: "▤",
-    enabled: false, // Phase 1.3
+    enabled: true,
   },
   {
     id: "members",

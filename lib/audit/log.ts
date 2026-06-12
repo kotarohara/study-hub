@@ -9,6 +9,9 @@
 import type { Db } from "../db/client.ts";
 import { auditLog } from "../db/schema.ts";
 
+/** Anything with Drizzle's insert API — the db handle or a transaction. */
+export type AuditDb = Pick<Db, "insert">;
+
 export interface AuditEvent {
   /** Namespaced verb: "auth.login", "pii.view", "export.create", ... */
   action: string;
@@ -22,7 +25,7 @@ export interface AuditEvent {
   ip?: string;
 }
 
-export async function audit(db: Db, event: AuditEvent): Promise<void> {
+export async function audit(db: AuditDb, event: AuditEvent): Promise<void> {
   await db.insert(auditLog).values({
     action: event.action,
     actorId: event.actorId ?? null,

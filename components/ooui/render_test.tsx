@@ -11,6 +11,20 @@ import {
   parseCollectionParams,
 } from "../../lib/ooui/collection.ts";
 import { resolveActions } from "../../lib/ooui/actions.ts";
+import { Stepper } from "./Stepper.tsx";
+
+Deno.test("Stepper: done/current/todo states", () => {
+  const steps = ["draft", "irb_review", "recruiting", "running", "analysis"];
+  const html = render(<Stepper steps={steps} current="recruiting" />);
+  assert.equal(html.match(/data-step-state="done"/g)?.length, 2);
+  assert.equal(html.match(/data-step-state="current"/g)?.length, 1);
+  assert.equal(html.match(/data-step-state="todo"/g)?.length, 2);
+  assert.ok(html.includes("✓"));
+
+  // Archived (not on the forward path): every step renders as off.
+  const off = render(<Stepper steps={steps} current="archived" />);
+  assert.equal(off.match(/data-step-state="off"/g)?.length, 5);
+});
 
 Deno.test("StatusBadge: labels and tones", () => {
   const html = render(<StatusBadge status="irb_review" />);
