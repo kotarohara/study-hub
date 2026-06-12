@@ -5,6 +5,7 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client.ts";
 import {
+  conditions,
   type Member,
   type Project,
   projects,
@@ -264,9 +265,30 @@ export async function duplicateStudy(
         description: opts.study.description,
         methodology: opts.study.methodology,
         oversightPathway: opts.study.oversightPathway,
+        researchQuestions: opts.study.researchQuestions,
+        hypotheses: opts.study.hypotheses,
+        independentVariables: opts.study.independentVariables,
+        dependentVariables: opts.study.dependentVariables,
+        designType: opts.study.designType,
+        targetN: opts.study.targetN,
+        exclusionCriteria: opts.study.exclusionCriteria,
+        counterbalancingScheme: opts.study.counterbalancingScheme,
         createdBy: opts.actor.id,
       })
       .returning();
+    const sourceConditions = await tx
+      .select()
+      .from(conditions)
+      .where(eq(conditions.studyId, opts.study.id));
+    if (sourceConditions.length > 0) {
+      await tx.insert(conditions).values(
+        sourceConditions.map((c) => ({
+          studyId: copy.id,
+          name: c.name,
+          position: c.position,
+        })),
+      );
+    }
     await audit(tx, {
       action: "study.duplicated",
       actorId: opts.actor.id,

@@ -9,6 +9,8 @@ import {
   type StudyStatus,
   type StudyWithProject,
 } from "../../../lib/objects/studies.ts";
+import { listConditions } from "../../../lib/objects/design.ts";
+import type { Condition } from "../../../lib/db/schema.ts";
 import { Layout } from "../../../components/Layout.tsx";
 import { DetailView } from "../../../components/ooui/DetailView.tsx";
 import { Stepper } from "../../../components/ooui/Stepper.tsx";
@@ -22,6 +24,7 @@ import {
 interface Data {
   found: StudyWithProject;
   activeTab: string;
+  conditions: Condition[];
 }
 
 const TABS = [
@@ -45,7 +48,13 @@ export const handler = define.handlers({
     const activeTab = TABS.some((t) => t.id === ctx.url.searchParams.get("tab"))
       ? ctx.url.searchParams.get("tab")!
       : "overview";
-    return page<Data>({ found, activeTab });
+    return page<Data>({
+      found,
+      activeTab,
+      conditions: activeTab === "design"
+        ? await listConditions(getDb(), found.study.id)
+        : [],
+    });
   },
 });
 
@@ -146,10 +155,61 @@ export default define.page<typeof handler>(({ data, state, url }) => {
           </p>
         )}
         {data.activeTab === "design" && (
-          <p class="text-sm text-gray-600">
-            The structured design editor (research questions, variables,
-            conditions, target N) arrives in Phase 1.3.
-          </p>
+          <div class="max-w-3xl space-y-4">
+            <div class="flex gap-2">
+              <a
+                href={`/studies/${study.id}/onepager`}
+                class="rounded-card border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
+                One-pager
+              </a>
+              {EDITABLE_STATES.includes(study.status) && (
+                <a
+                  href={`/studies/${study.id}/design`}
+                  class="rounded-card border border-brand-600 bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                >
+                  Edit design
+                </a>
+              )}
+            </div>
+            <dl class="grid grid-cols-1 gap-x-8 gap-y-3 text-sm md:grid-cols-2">
+              {[
+                ["Research questions", study.researchQuestions],
+                ["Hypotheses", study.hypotheses],
+                ["Independent variables", study.independentVariables],
+                ["Dependent variables", study.dependentVariables],
+                ["Exclusion criteria", study.exclusionCriteria],
+                ["Counterbalancing", study.counterbalancingScheme],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">
+                    {label}
+                  </dt>
+                  <dd class="whitespace-pre-wrap text-gray-900">
+                    {value || <span class="text-gray-400">—</span>}
+                  </dd>
+                </div>
+              ))}
+              <div>
+                <dt class="text-xs uppercase tracking-wide text-gray-500">
+                  Design type / target N
+                </dt>
+                <dd class="text-gray-900">
+                  {study.designType ?? "—"} / {study.targetN ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-xs uppercase tracking-wide text-gray-500">
+                  Conditions
+                </dt>
+                <dd class="text-gray-900">
+                  {data.conditions.length === 0
+                    ? <span class="text-gray-400">—</span>
+                    : data.conditions.map((c) => c.name).join(", ")}
+                </dd>
+              </div>
+            </dl>
+          </div>
         )}
         {data.activeTab === "documents" && (
           <p class="text-sm text-gray-600">

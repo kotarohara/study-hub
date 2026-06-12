@@ -149,7 +149,13 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       Stepper component renders the lifecycle. Routes: `/studies`, `/studies/new?project=`,
       `/studies/[id]` (+ edit/transition/duplicate/archive/unarchive); project Studies tab live.
       ⚠ 1.7 must add the recruiting guard (approved consent Document) to the transition map.
-- [ ] 1.3 Design editor: structured fields (RQs, hypotheses, IVs/DVs, conditions, design type, target N, exclusion criteria) + one-pager render
+- [x] 1.3 Design editor: structured fields (RQs, hypotheses, IVs/DVs, conditions, design type, target N, exclusion criteria) + one-pager render
+      — design columns on `studies` (+ `counterbalancing_scheme` text per spec's Latin-square cut)
+      and a `conditions` table (ordered, unique names per study; 1.4 assigns enrollments to these)
+      — migration 0005. `lib/objects/design.ts`: updateDesign + condition add/remove, all gated to
+      draft/irb_review and audited; duplicateStudy now copies design fields and conditions.
+      Editor at `/studies/[id]/design` (list fields newline-separated); print-friendly one-pager
+      at `/studies/[id]/onepager`; Design tab shows the summary.
 - [ ] 1.4 Condition assignment engine: random + manual counterbalanced assignment with audit trail + tests
 - [ ] 1.5 Documents: upload/create, version history + diff, review statuses, reviewer comments
 - [ ] 1.6 Oversight pathway selector: IRB-reviewed / IRB-exempt (reference required) / Internal Pilot (PI confirmation + justification → audit log; permanent PILOT badge; pilot data-quarantine flag)

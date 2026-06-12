@@ -2,12 +2,14 @@
 // drizzle-kit (Node-based) loads it directly when generating migrations.
 import {
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -141,6 +143,12 @@ export const oversightPathway = pgEnum("oversight_pathway", [
   "internal_pilot",
 ]);
 
+export const designType = pgEnum("design_type", [
+  "between",
+  "within",
+  "mixed",
+]);
+
 export const studies = pgTable("studies", {
   id: uuid("id").primaryKey().defaultRandom(),
   projectId: uuid("project_id")
@@ -155,6 +163,17 @@ export const studies = pgTable("studies", {
     .default("irb_reviewed"),
   /** Status before archiving, so unarchive can restore it. */
   archivedFrom: studyStatus("archived_from"),
+  // Structured design fields (spec §3.2, simplified editor). List-like
+  // fields are newline-separated plain text; the one-pager renders them.
+  researchQuestions: text("research_questions").notNull().default(""),
+  hypotheses: text("hypotheses").notNull().default(""),
+  independentVariables: text("independent_variables").notNull().default(""),
+  dependentVariables: text("dependent_variables").notNull().default(""),
+  designType: designType("design_type"),
+  targetN: integer("target_n"),
+  exclusionCriteria: text("exclusion_criteria").notNull().default(""),
+  /** Spec cut the Latin-square generator: the scheme is recorded as text. */
+  counterbalancingScheme: text("counterbalancing_scheme").notNull().default(""),
   createdBy: uuid("created_by")
     .notNull()
     .references(() => members.id),
@@ -167,6 +186,24 @@ export const studies = pgTable("studies", {
 });
 
 export type Study = typeof studies.$inferSelect;
+
+// Experimental conditions (spec §2.1: Study has Conditions). Enrollments
+// are assigned to conditions by the engine in Phase 1.4.
+export const conditions = pgTable("conditions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studyId: uuid("study_id")
+    .notNull()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  position: integer("position").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("conditions_study_name_unique").on(table.studyId, table.name),
+]);
+
+export type Condition = typeof conditions.$inferSelect;
 
 // Append-only audit log (spec §4: PII views/exports, consent changes,
 // deletions, payment approvals). Immutability is enforced in the database
