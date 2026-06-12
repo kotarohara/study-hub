@@ -134,7 +134,11 @@ export const handler = define.handlers({
           ...auditCtx,
         });
       }
-      return ctx.redirect(`/studies/${study.id}/screener`, 303);
+      const back = String(form.get("back") ?? "");
+      return ctx.redirect(
+        back.startsWith("/") ? back : `/studies/${study.id}/screener`,
+        303,
+      );
     } catch (err) {
       if (err instanceof ScreenerError || err instanceof FormError) {
         return page<Data>(await loadData(db, study, err.message), {

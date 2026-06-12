@@ -39,6 +39,8 @@ import {
   type ConsentStatus,
   consentStatusOfStudy,
 } from "../../../lib/objects/consents.ts";
+import { type StudyFunnel, studyFunnel } from "../../../lib/objects/funnel.ts";
+import { FunnelPanel } from "../../../components/FunnelPanel.tsx";
 import { audit } from "../../../lib/audit/log.ts";
 import { clientHost } from "../../../lib/auth/limiters.ts";
 import { Layout } from "../../../components/Layout.tsx";
@@ -61,12 +63,14 @@ interface Data {
   enrollmentRows: EnrollmentRow[];
   pool: Participant[];
   consent: [string, ConsentStatus][];
+  funnel: StudyFunnel | null;
 }
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "design", label: "Design" },
   { id: "participants", label: "Participants" },
+  { id: "recruitment", label: "Recruitment" },
   { id: "documents", label: "Documents" },
   { id: "timeline", label: "Timeline" },
 ];
@@ -120,6 +124,9 @@ export const handler = define.handlers({
           enrollmentRows.map((r) => r.enrollment),
         )).entries()]
         : [],
+      funnel: activeTab === "recruitment"
+        ? await studyFunnel(getDb(), found.study)
+        : null,
     });
   },
 });
@@ -431,6 +438,13 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             consent={new Map(data.consent)}
             canOperate={hasRole(me.role, "assistant")}
             canPilotToggle={hasRole(me.role, "researcher")}
+          />
+        )}
+        {data.activeTab === "recruitment" && data.funnel && (
+          <FunnelPanel
+            study={study}
+            funnel={data.funnel}
+            canOperate={hasRole(me.role, "assistant")}
           />
         )}
         {data.activeTab === "timeline" && (

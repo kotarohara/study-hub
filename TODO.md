@@ -272,7 +272,14 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       for manual copy until messaging (3.x) delivers them. ⚠ File-only consent documents can't
       render on the participant page (text content only) — upload-based consent forms need the
       file route made participant-safe later.
-- [ ] 2.7 Recruitment funnel stats per channel + quota dashboard (per-stratum counts vs targets; manual pause)
+- [x] 2.7 Recruitment funnel stats per channel + quota dashboard (per-stratum counts vs targets; manual pause)
+      "Recruitment" tab on the study page: cumulative funnel (viewed from screener views;
+      screened/eligible/consented/completed approximated by CURRENT enrollment status — history
+      not replayed), per-channel breakdown (participant `source`), per-condition quotas vs
+      ceil(targetN / #conditions) with full-quota highlighting, and the manual screener
+      pause/resume (auto-pause cut per spec). Pilot enrollments excluded from every number,
+      reported separately. ⚠ Divergence: quotas are per CONDITION + overall; demographic
+      *strata* quotas need a stratum-definition feature that doesn't exist — revisit if needed.
 - [ ] 2.8 Re-recruitment: pool filtering + bulk invites via preferred ContactChannel
 
 ## Phase 3 — Sessions, Reminders & Comms *(first usable release)*
