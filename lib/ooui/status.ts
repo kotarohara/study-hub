@@ -32,6 +32,10 @@ const TONES: Record<string, StatusTone> = {
   completed: "success",
   withdrawn: "warning",
   excluded: "danger",
+  // Oversight pathways (spec §3.3) — internal pilot is deliberately loud
+  irb_reviewed: "info",
+  irb_exempt: "warning",
+  internal_pilot: "pilot",
   // Member roles
   pi: "info",
   researcher: "neutral",

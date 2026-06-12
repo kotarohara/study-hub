@@ -113,6 +113,61 @@ export const projectMembers = pgTable("project_members", {
   primaryKey({ columns: [table.projectId, table.memberId] }),
 ]);
 
+// Studies (spec §2.1): one experiment/survey/diary study with a design and
+// lifecycle state. The lifecycle (§2.2 #5) drives which actions are enabled.
+export const studyStatus = pgEnum("study_status", [
+  "draft",
+  "irb_review",
+  "recruiting",
+  "running",
+  "analysis",
+  "archived",
+]);
+
+export const studyMethodology = pgEnum("study_methodology", [
+  "survey",
+  "crowdsourcing",
+  "lab_experiment",
+  "diary_study",
+  "interview",
+  "field_deployment",
+]);
+
+// Oversight pathway (spec §3.3). The full selector with PI gate and pilot
+// quarantine lands in Phase 1.6; until then studies are IRB-reviewed.
+export const oversightPathway = pgEnum("oversight_pathway", [
+  "irb_reviewed",
+  "irb_exempt",
+  "internal_pilot",
+]);
+
+export const studies = pgTable("studies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  methodology: studyMethodology("methodology").notNull(),
+  status: studyStatus("status").notNull().default("draft"),
+  oversightPathway: oversightPathway("oversight_pathway")
+    .notNull()
+    .default("irb_reviewed"),
+  /** Status before archiving, so unarchive can restore it. */
+  archivedFrom: studyStatus("archived_from"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Study = typeof studies.$inferSelect;
+
 // Append-only audit log (spec §4: PII views/exports, consent changes,
 // deletions, payment approvals). Immutability is enforced in the database
 // by triggers (see migration 0002) — UPDATE/DELETE/TRUNCATE raise.

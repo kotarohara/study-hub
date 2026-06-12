@@ -23,7 +23,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Studies",
     href: "/studies",
     icon: "⚗",
-    enabled: false, // Phase 1.2
+    enabled: true,
   },
   {
     id: "participants",

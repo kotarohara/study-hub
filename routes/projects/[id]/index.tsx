@@ -1,12 +1,13 @@
 import { HttpError, page } from "fresh";
 import { define } from "../../../utils.ts";
 import { getDb } from "../../../lib/db/client.ts";
-import type { Member, Project } from "../../../lib/db/schema.ts";
+import type { Member, Project, Study } from "../../../lib/db/schema.ts";
 import {
   getProjectFor,
   listAddableMembers,
   listProjectMembers,
 } from "../../../lib/objects/projects.ts";
+import { listStudiesOfProject } from "../../../lib/objects/studies.ts";
 import { hasRole } from "../../../lib/auth/roles.ts";
 import { Layout } from "../../../components/Layout.tsx";
 import { DetailView } from "../../../components/ooui/DetailView.tsx";
@@ -18,6 +19,7 @@ interface Data {
   activeTab: string;
   projectMembers: Member[];
   addable: Member[];
+  studies: Study[];
 }
 
 const TABS = [
@@ -44,6 +46,9 @@ export const handler = define.handlers({
         ? await listProjectMembers(db, project.id)
         : [],
       addable: onMembersTab ? await listAddableMembers(db, project.id) : [],
+      studies: activeTab === "studies"
+        ? await listStudiesOfProject(db, project.id)
+        : [],
     });
   },
 });
@@ -173,9 +178,31 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         )}
 
         {data.activeTab === "studies" && (
-          <p class="text-sm text-gray-600">
-            Studies in this project will appear here (Phase 1.2).
-          </p>
+          <div class="space-y-4">
+            <div class="flex flex-wrap gap-2">
+              {data.studies.length === 0 && (
+                <p class="text-sm text-gray-500">No studies yet.</p>
+              )}
+              {data.studies.map((s) => (
+                <Chip
+                  key={s.id}
+                  href={`/studies/${s.id}`}
+                  icon="⚗"
+                  label={s.name}
+                  sublabel={s.methodology.replaceAll("_", " ")}
+                  status={s.status}
+                />
+              ))}
+            </div>
+            {canManage && project.status === "active" && (
+              <a
+                href={`/studies/new?project=${project.id}`}
+                class="inline-block rounded-card border border-brand-600 bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              >
+                New study
+              </a>
+            )}
+          </div>
         )}
       </DetailView>
     </Layout>

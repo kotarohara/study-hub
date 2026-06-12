@@ -29,6 +29,13 @@
       "when": 1781258129838,
       "tag": "0003_slow_domino",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781258591893,
+      "tag": "0004_illegal_thunderbolt_ross",
+      "breakpoints": true
     }
   ]
 }
