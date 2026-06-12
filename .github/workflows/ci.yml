@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: deno install
+
+      - name: Format, lint, type-check
+        run: deno task check
+
+      - name: Start local stack (Postgres, MinIO, Mailpit)
+        run: deno task stack:up
+
+      - name: Run migrations
+        run: deno task db:migrate
+
+      - name: Build
+        run: deno task build
+
+      - name: Test
+        run: deno task test
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f compose.dev.yml logs --tail=50

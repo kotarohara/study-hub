@@ -22,7 +22,7 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
   - Email → `ChannelAdapter` impl for SES (prod) / SMTP-to-Mailpit (dev)
   - Telegram / Discord / Notion → adapters with fake/logging impls; webhooks tested by
     POSTing simulated payloads
-  - Turnstile → verification stub when `ENV=development`
+  - Turnstile → verification stub when `APP_ENV=development`
 - **No test may require network access or real credentials.**
 - `.env.example` documents every variable; dev defaults work out of the box.
 
@@ -31,24 +31,52 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 ## Phase 0 — Foundations (all local)
 
 ### 0.1 Scaffold
-- [ ] Initialize Fresh 2 project; `deno.json` tasks: `dev`, `test`, `check` (fmt+lint+types), `db:migrate`, `db:seed`
-- [ ] `compose.dev.yml`: Postgres 16 + MinIO + Mailpit, with healthchecks and volumes
-- [ ] `.env.example` + config loader (Zod-validated, fails fast on missing vars)
-- [ ] `/health` route (checks DB + storage connectivity)
-- [ ] GitHub Actions CI: `deno task check` + `deno test` against service containers
+- [x] Initialize Fresh 2 project; `deno.json` tasks: `dev`, `test`, `check` (fmt+lint+types), `db:migrate`, `db:seed`
+      — Fresh 2.3.3 with the Vite setup (current default). `db:migrate`/`db:seed` deferred to 0.2
+      when the scripts exist; added `stack:up`/`stack:down` tasks for the compose stack.
+- [x] `compose.dev.yml`: Postgres 16 + MinIO + Mailpit, with healthchecks and volumes
+      — plus a one-shot `minio-init` job that creates the dev buckets and enables versioning
+      on `studyhub-backups` (mirrors prod S3).
+- [x] `.env.example` + config loader (Zod-validated, fails fast on missing vars)
+      — `lib/config.ts`; env var is `APP_ENV` (not `ENV`, which is reserved by POSIX sh).
+      Dev/test fall back to compose.dev.yml defaults so a fresh checkout needs no .env;
+      production requires every var explicitly.
+- [x] `/health` route (checks DB + storage connectivity) — `routes/health.ts` + `lib/health.ts`
+- [x] GitHub Actions CI: `deno task check` + `deno test` against service containers
+      — uses `docker compose -f compose.dev.yml up --wait` (same stack as dev) rather than GHA
+      service containers; also runs `deno task build` (vite). CI is the verification path for
+      anything needing JSR or container pulls when the dev sandbox blocks those hosts.
 
 ### 0.2 Data layer + backups
-- [ ] Drizzle ORM setup: connection pool, migration runner, first migration (members table as guinea pig)
-- [ ] Test helpers: per-test transaction rollback or template-DB reset; fake-data factories
-- [ ] Seed script with realistic fake data (faker), runnable via `deno task db:seed`
-- [ ] `FileStore` interface + S3-API implementation (works against MinIO and real S3); presigned upload/download URLs; tests against MinIO
-- [ ] `scripts/backup.sh`: `pg_dump` → versioned bucket (MinIO locally); `scripts/restore.sh`; automated test that backs up, drops, restores, verifies
-- [ ] Backup job wiring via `Deno.cron` (interval configurable; manual-trigger route in dev)
+- [x] Drizzle ORM setup: connection pool, migration runner, first migration (members table as guinea pig)
+      — `lib/db/{schema,client,migrate}.ts`; migrations generated with drizzle-kit
+      (`deno task db:generate`, works under Deno) into `drizzle/`; applied via `deno task db:migrate`.
+- [x] Test helpers: per-test transaction rollback or template-DB reset; fake-data factories
+      — `withRollback` (transaction rollback) in `lib/db/test_util.ts`; faker factories in `lib/db/factories.ts`.
+- [x] Seed script with realistic fake data (faker), runnable via `deno task db:seed`
+      — deterministic (seeded faker), idempotent (onConflictDoNothing), refuses production.
+- [x] `FileStore` interface + S3-API implementation (works against MinIO and real S3); presigned upload/download URLs; tests against MinIO
+      — `lib/storage/filestore.ts` (AWS SDK v3, path-style); per-bucket instances (files/backups).
+- [x] `scripts/backup.sh`: `pg_dump` → versioned bucket (MinIO locally); `scripts/restore.sh`; automated test that backs up, drops, restores, verifies
+      — implemented in TypeScript instead of shell (`deno task db:backup` / `db:restore`, core in `lib/backup.ts`):
+      portable and directly testable. Full backup→data-loss→restore→verify cycle in `lib/backup_test.ts`;
+      requires pg_dump/pg_restore on PATH. Drill doc: `docs/backup-restore-drill.md`.
+- [x] Backup job wiring via `Deno.cron` (interval configurable; manual-trigger route in dev)
+      — `BACKUP_CRON_ENABLED` + `BACKUP_CRON` env knobs (schema-level defaults); `--unstable-cron` on the
+      start task; dev-only manual trigger `POST /api/dev/backup`. Discord failure alerts deferred to 3.3.
 
 ### 0.3 Crypto & tokens
-- [ ] AES-256-GCM field encryption helpers (encrypt/decrypt, key from env, versioned key id for future rotation) + tests incl. tamper detection
-- [ ] Drizzle custom column type for encrypted PII fields
-- [ ] HMAC magic-link tokens: sign/verify with expiry + purpose scoping + tests
+- [x] AES-256-GCM field encryption helpers (encrypt/decrypt, key from env, versioned key id for future rotation) + tests incl. tamper detection
+      — `lib/crypto/encryption.ts`; node:crypto (sync, required by Drizzle custom types); keyring env
+      `PII_ENCRYPTION_KEYS` = `<version>:<base64 32B key>` pairs, highest version encrypts; stored
+      format `enc:v<n>:<iv>:<ct>:<tag>`. Tests cover tamper (all parts), rotation, wrong-key, malformed.
+- [x] Drizzle custom column type for encrypted PII fields
+      — `encryptedText` in `lib/db/encrypted.ts` (kept out of schema.ts so drizzle-kit loads cleanly);
+      integration test proves plaintext through Drizzle, ciphertext at rest.
+- [x] HMAC magic-link tokens: sign/verify with expiry + purpose scoping + tests
+      — `lib/crypto/magic_link.ts`; HMAC-SHA256, base64url `payload.sig`, timing-safe compare,
+      signature checked before payload parse; `MAGIC_LINK_SECRET` env (min 32 chars). One-time-use
+      tokens (Telegram pairing) need server-side state — deferred to 3.4.
 
 ### 0.4 Auth & members
 - [ ] Members schema + Argon2id hashing + login/logout routes + session cookies (HttpOnly, Secure, SameSite); CSRF tokens

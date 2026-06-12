@@ -1,0 +1,67 @@
+{
+  "nodeModulesDir": "manual",
+  "tasks": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "deno serve -A --unstable-cron _fresh/server.js",
+    "check": "deno fmt --check . && deno lint . && deno check",
+    "test": "deno test -A",
+    "db:generate": "deno run -A npm:drizzle-kit generate",
+    "db:migrate": "deno run -A lib/db/migrate.ts",
+    "db:seed": "deno run -A lib/db/seed.ts",
+    "db:backup": "deno run -A scripts/backup.ts",
+    "db:restore": "deno run -A scripts/restore.ts",
+    "stack:up": "docker compose -f compose.dev.yml up -d --wait && docker compose -f compose.dev.yml run --rm minio-init",
+    "stack:down": "docker compose -f compose.dev.yml down"
+  },
+  "lint": {
+    "rules": {
+      "tags": ["fresh", "recommended"]
+    }
+  },
+  "exclude": ["**/_fresh/*"],
+  "fmt": {
+    "exclude": ["**/*.md"]
+  },
+  "imports": {
+    "@/": "./",
+    "fresh": "jsr:@fresh/core@^2.3.3",
+    "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1.1.2",
+    "preact": "npm:preact@^10.29.1",
+    "@preact/signals": "npm:@preact/signals@^2.9.0",
+    "vite": "npm:vite@^7.1.3",
+    "@types/babel__core": "npm:@types/babel__core@^7.20.5",
+    "@types/node": "npm:@types/node@^24.13.2",
+    "tailwindcss": "npm:tailwindcss@^4.1.10",
+    "@tailwindcss/vite": "npm:@tailwindcss/vite@^4.1.12",
+    "zod": "npm:zod@^4.0.0",
+    "postgres": "npm:postgres@^3.4.5",
+    "drizzle-orm": "npm:drizzle-orm@^0.45.2",
+    "drizzle-kit": "npm:drizzle-kit@^0.31.10",
+    "@faker-js/faker": "npm:@faker-js/faker@^10.4.0",
+    "@aws-sdk/client-s3": "npm:@aws-sdk/client-s3@^3.1067.0",
+    "@aws-sdk/s3-request-presigner": "npm:@aws-sdk/s3-request-presigner@^3.1067.0"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "dom.asynciterable", "dom.iterable", "deno.ns"],
+    "types": ["vite/client"],
+    "jsx": "precompile",
+    "jsxImportSource": "preact",
+    "jsxPrecompileSkipElements": [
+      "a",
+      "img",
+      "source",
+      "body",
+      "html",
+      "head",
+      "title",
+      "meta",
+      "script",
+      "link",
+      "style",
+      "base",
+      "noscript",
+      "template"
+    ]
+  }
+}
