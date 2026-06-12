@@ -44,6 +44,7 @@ Deno.test("production: missing variables fail fast and name every one", () => {
       "MAIL_FROM",
       "PII_ENCRYPTION_KEYS",
       "MAGIC_LINK_SECRET",
+      "PII_INDEX_SECRET",
     ]
   ) {
     assert.ok(
@@ -69,6 +70,7 @@ Deno.test("production: explicit configuration is accepted", () => {
     MAIL_FROM: "StudyHub <noreply@studyhub.example.org>",
     PII_ENCRYPTION_KEYS: "1:c3R1ZHlodWItZGV2LW9ubHktYWVzLWtleS0zMi1ieSE=",
     MAGIC_LINK_SECRET: "a-production-secret-of-sufficient-length!!",
+    PII_INDEX_SECRET: "another-production-secret-of-sufficient-len",
   });
   assert.equal(config.APP_ENV, "production");
   assert.equal(config.S3_REGION, "ap-southeast-1");

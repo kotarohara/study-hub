@@ -78,6 +78,13 @@
       "when": 1781270230252,
       "tag": "0010_red_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781286226251,
+      "tag": "0011_magenta_vanisher",
+      "breakpoints": true
     }
   ]
 }

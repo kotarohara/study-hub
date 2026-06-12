@@ -1,6 +1,8 @@
-// Database schema (Drizzle). Keep this file free of Deno-specific imports —
-// drizzle-kit (Node-based) loads it directly when generating migrations.
+// Database schema (Drizzle). drizzle-kit loads this file when generating
+// migrations; the encryptedText import is safe because its keyring is
+// resolved lazily at query time, never at module load.
 import {
+  boolean,
   date,
   index,
   integer,
@@ -13,6 +15,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { encryptedText } from "./encrypted.ts";
 
 // Spec §3.10: PI > Researcher > Assistant > Collaborator.
 export const memberRole = pgEnum("member_role", [
@@ -319,6 +322,69 @@ export const documentComments = pgTable("document_comments", {
 });
 
 export type DocumentComment = typeof documentComments.$inferSelect;
+
+// Participants (spec §2.1, §3.4): the lab-wide pool. Records persist
+// across studies for re-recruitment. PII (name, notes, channel values)
+// is app-layer encrypted transparently via the encryptedText column type;
+// demographics used for filtering stay plaintext. The pseudonymous `code`
+// is what appears in datasets, exports, Discord and Notion.
+export const participants = pgTable("participants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Short pseudonymous code used everywhere PII must not appear. */
+  code: text("code").notNull().unique(),
+  /** PII: participant name (encrypted at rest). */
+  name: encryptedText("name").notNull(),
+  /** PII: free-text notes — may contain PII (encrypted at rest). */
+  notes: encryptedText("notes").notNull().default(""),
+  yearOfBirth: integer("year_of_birth"),
+  gender: text("gender").notNull().default(""),
+  /** Where this person was recruited from (flyer, class, friend, …). */
+  source: text("source").notNull().default(""),
+  doNotContact: boolean("do_not_contact").notNull().default(false),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Participant = typeof participants.$inferSelect;
+
+export const contactChannelKind = pgEnum("contact_channel_kind", [
+  "email",
+  "telegram",
+  "phone",
+  "paypal",
+  "prolific",
+]);
+
+export type ContactChannelKind = (typeof contactChannelKind.enumValues)[number];
+
+export const contactChannels = pgTable("contact_channels", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  participantId: uuid("participant_id")
+    .notNull()
+    .references(() => participants.id, { onDelete: "cascade" }),
+  kind: contactChannelKind("kind").notNull(),
+  /** PII: the address / chat id / handle (encrypted at rest). */
+  value: encryptedText("value").notNull(),
+  /** Keyed blind index of the normalized value — dedup and lookup. */
+  valueIndex: text("value_index").notNull(),
+  verified: boolean("verified").notNull().default(false),
+  isPreferred: boolean("is_preferred").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("contact_channels_participant_idx").on(table.participantId),
+  index("contact_channels_value_index_idx").on(table.valueIndex),
+]);
+
+export type ContactChannel = typeof contactChannels.$inferSelect;
 
 // Milestones / Tasks (spec §2.1, §3.7): timeline items with owners, due
 // dates and dependencies; belong to a Study or to the Project itself.

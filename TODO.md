@@ -221,8 +221,18 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 2 — Participants & Recruitment
 
-- [ ] 2.1 Participant + ContactChannel schemas (encrypted PII columns), demographics, do-not-contact flag, participation history
-- [ ] 2.2 Cross-study deduplication warnings on participant create/import
+- [x] 2.1 Participant + ContactChannel schemas (encrypted PII columns), demographics, do-not-contact flag, participation history
+      Pool at `/participants` (visible to all members; mutations assistant+). `encryptedText`
+      directly in schema for name/notes/channel values; pseudonymous `P-xxxxxxxx` codes.
+      PII views audited at the HANDLER level (`pii.view`, `pii.list_viewed`), mutations audited
+      in `lib/objects/participants.ts` with codes only. Detail tab "History" is a placeholder
+      until enrollments (2.5). Channel verification flag exists; verification flows come with
+      Telegram pairing (3.7).
+- [x] 2.2 Cross-study deduplication warnings on participant create/import
+      Keyed blind index (HMAC-SHA256, `PII_INDEX_SECRET`, never rotate without re-indexing)
+      over normalized `kind:value` in `lib/crypto/blind_index.ts` — warns on create
+      (confirm-anyway, never hard-blocks) + passive banner on the detail page.
+      ⚠ The "import" half re-applies when the CSV importer lands (Phase 4).
 - [ ] 2.3 Simple-form builder Instrument (item types, no branching) + versioning + scoring rules; external-instrument records (Qualtrics links)
 - [ ] 2.4 Public screener pages at `p/[token]`: Turnstile (stubbed in dev) + rate limits; eligibility rules → Enrollment status
 - [ ] 2.5 Enrollment lifecycle (screened → eligible → consented → active → completed/withdrawn/excluded) + pilot-enrollment flag
