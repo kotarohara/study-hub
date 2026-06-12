@@ -140,7 +140,15 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       membership changes are refused at both the action-gating and handler level). Member detail
       Overview now shows the member's project chips. Creator auto-joins their project. Seed adds an
       "Example Project". Project create permission: researcher+.
-- [ ] 1.2 Study CRUD: lifecycle states (draft → IRB review → recruiting → running → analysis → archived) + stepper; state-gated actions; duplication (design + docs + timeline, minus participants/data)
+- [x] 1.2 Study CRUD: lifecycle states (draft → IRB review → recruiting → running → analysis → archived) + stepper; state-gated actions; duplication (design + docs + timeline, minus participants/data)
+      — `studies` table (migration 0004) with methodology + `oversight_pathway` column (creation
+      locked to irb_reviewed until the 1.6 selector) + `archived_from` (unarchive restores the
+      prior state). Explicit, audited transition map in `lib/objects/studies.ts`; edit only in
+      draft/irb_review; archive from any state; duplication copies the design into a fresh draft —
+      extend `duplicateStudy` to copy documents (1.5) and milestones (1.9) when those land.
+      Stepper component renders the lifecycle. Routes: `/studies`, `/studies/new?project=`,
+      `/studies/[id]` (+ edit/transition/duplicate/archive/unarchive); project Studies tab live.
+      ⚠ 1.7 must add the recruiting guard (approved consent Document) to the transition map.
 - [ ] 1.3 Design editor: structured fields (RQs, hypotheses, IVs/DVs, conditions, design type, target N, exclusion criteria) + one-pager render
 - [ ] 1.4 Condition assignment engine: random + manual counterbalanced assignment with audit trail + tests
 - [ ] 1.5 Documents: upload/create, version history + diff, review statuses, reviewer comments
