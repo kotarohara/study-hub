@@ -6,7 +6,13 @@ export interface CheckResult {
 }
 
 function toMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof AggregateError && err.errors.length > 0) {
+    return err.errors.map(toMessage).join("; ");
+  }
+  if (err instanceof Error) {
+    return err.message || err.name || "unknown error";
+  }
+  return String(err);
 }
 
 /** Verifies the database accepts connections and answers a trivial query. */
