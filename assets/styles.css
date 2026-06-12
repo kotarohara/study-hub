@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+/* StudyHub design tokens (spec §2 OOUI shell). Semantic tones referenced by
+   StatusBadge/Chip; object pages use Tailwind utilities on top of these. */
+@theme {
+  /* Brand */
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe6fe;
+  --color-brand-600: #4060c8;
+  --color-brand-700: #344ea6;
+  --color-brand-900: #243466;
+
+  /* Pilot quarantine — deliberately loud, never restyled (spec §3.3) */
+  --color-pilot-bg: #fdf4ff;
+  --color-pilot-border: #d946ef;
+  --color-pilot-text: #86198f;
+
+  --radius-card: 0.5rem;
+}

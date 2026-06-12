@@ -12,7 +12,8 @@
     "npm:drizzle-orm@~0.45.2": "0.45.2_postgres@3.4.9",
     "npm:hash-wasm@^4.12.0": "4.12.0",
     "npm:postgres@^3.4.5": "3.4.9",
-    "npm:preact@^10.29.1": "10.29.2",
+    "npm:preact-render-to-string@^6.7.0": "6.7.0_preact@10.29.2",
+    "npm:preact@^10.29.2": "10.29.2",
     "npm:tailwindcss@^4.1.10": "4.3.0",
     "npm:vite@^7.1.3": "7.3.5_@types+node@24.13.2",
     "npm:zod@4": "4.4.3"
@@ -1537,6 +1538,12 @@
     "postgres@3.4.9": {
       "integrity": "sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw=="
     },
+    "preact-render-to-string@6.7.0_preact@10.29.2": {
+      "integrity": "sha512-Z4WR8fmLMRpdYqJ9i7vrlXSsSrxVJydwrkEXHapexfARbWfGb7vGcnvNQnIzN0cXciMVOlz/XLoiMCi9gUsy9Q==",
+      "dependencies": [
+        "preact"
+      ]
+    },
     "preact@10.29.2": {
       "integrity": "sha512-7tNmwg/7mzzAoB/8kSg6Hl37JraAZw3Z3A0JSY7VXlZwo82Xn0G7wKbNNs2qoF4ZEEsQGTwDAroNdqKs1ofJxQ=="
     },
@@ -1667,7 +1674,8 @@
       "npm:drizzle-orm@~0.45.2",
       "npm:hash-wasm@^4.12.0",
       "npm:postgres@^3.4.5",
-      "npm:preact@^10.29.1",
+      "npm:preact-render-to-string@^6.7.0",
+      "npm:preact@^10.29.2",
       "npm:tailwindcss@^4.1.10",
       "npm:vite@^7.1.3",
       "npm:zod@4"

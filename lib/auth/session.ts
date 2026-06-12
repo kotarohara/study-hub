@@ -44,6 +44,18 @@ export async function destroySession(db: Db, token: string): Promise<void> {
   await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
 }
 
+/** Destroys every session of a member ("sign out everywhere"). */
+export async function destroyMemberSessions(
+  db: Db,
+  memberId: string,
+): Promise<number> {
+  const deleted = await db
+    .delete(sessions)
+    .where(eq(sessions.memberId, memberId))
+    .returning({ id: sessions.id });
+  return deleted.length;
+}
+
 /** Removes expired sessions; returns the number deleted. Run periodically. */
 export async function pruneExpiredSessions(
   db: Db,
