@@ -14,6 +14,7 @@ import {
 } from "../db/schema.ts";
 import { audit } from "../audit/log.ts";
 import { type AuditCtx, EDITABLE_STATES, StudyError } from "./studies.ts";
+import { type AssignmentStrategy, parseSequence } from "./assignment.ts";
 
 export const DESIGN_TYPES = ["between", "within", "mixed"] as const;
 export type DesignType = (typeof DESIGN_TYPES)[number];
@@ -27,6 +28,8 @@ export interface DesignFields {
   targetN: number | null;
   exclusionCriteria: string;
   counterbalancingScheme: string;
+  assignmentStrategy: AssignmentStrategy;
+  assignmentSequence: string;
 }
 
 function assertEditable(study: Study) {
@@ -52,6 +55,13 @@ export async function updateDesign(
 ): Promise<Study> {
   assertEditable(opts.study);
   const f = opts.fields;
+  if (f.assignmentStrategy === "manual_sequence") {
+    // A manual sequence must reference existing conditions of this study.
+    parseSequence(
+      f.assignmentSequence,
+      await listConditions(db, opts.study.id),
+    );
+  }
   const [updated] = await db
     .update(studies)
     .set({
@@ -63,6 +73,8 @@ export async function updateDesign(
       targetN: f.targetN,
       exclusionCriteria: f.exclusionCriteria.trim(),
       counterbalancingScheme: f.counterbalancingScheme.trim(),
+      assignmentStrategy: f.assignmentStrategy,
+      assignmentSequence: f.assignmentSequence.trim(),
       updatedAt: new Date(),
     })
     .where(eq(studies.id, opts.study.id))

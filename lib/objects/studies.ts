@@ -273,6 +273,8 @@ export async function duplicateStudy(
         targetN: opts.study.targetN,
         exclusionCriteria: opts.study.exclusionCriteria,
         counterbalancingScheme: opts.study.counterbalancingScheme,
+        assignmentStrategy: opts.study.assignmentStrategy,
+        assignmentSequence: opts.study.assignmentSequence,
         createdBy: opts.actor.id,
       })
       .returning();

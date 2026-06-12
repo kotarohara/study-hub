@@ -16,12 +16,38 @@ import {
   parseTargetN,
   updateDesign,
 } from "../../../lib/objects/design.ts";
+import {
+  ASSIGNMENT_STRATEGIES,
+  type AssignmentStrategy,
+  planAssignments,
+  seededRandom,
+} from "../../../lib/objects/assignment.ts";
 import { Layout } from "../../../components/Layout.tsx";
 
 interface Data {
   study: Study;
   conditions: Condition[];
   error?: string;
+}
+
+/** Preview of the first assignments under the saved configuration. */
+function previewPlan(study: Study, conditions: Condition[]): string[] | null {
+  if (conditions.length === 0) return null;
+  try {
+    return planAssignments(
+      {
+        conditions,
+        counts: {},
+        strategy: study.assignmentStrategy,
+        sequence: study.assignmentSequence,
+        assignedSoFar: 0,
+        random: seededRandom(42),
+      },
+      Math.min(8, conditions.length * 3),
+    ).map((c) => c.name);
+  } catch {
+    return null; // e.g. manual strategy with a stale sequence
+  }
 }
 
 async function loadEditable(ctx: {
@@ -52,6 +78,7 @@ export const handler = define.handlers({
 
     try {
       const rawType = get("designType");
+      const rawStrategy = get("assignmentStrategy");
       const updated = await updateDesign(db, {
         study,
         fields: {
@@ -65,6 +92,12 @@ export const handler = define.handlers({
           targetN: parseTargetN(get("targetN")),
           exclusionCriteria: get("exclusionCriteria"),
           counterbalancingScheme: get("counterbalancingScheme"),
+          assignmentStrategy: ASSIGNMENT_STRATEGIES.includes(
+              rawStrategy as AssignmentStrategy,
+            )
+            ? (rawStrategy as AssignmentStrategy)
+            : "random_balanced",
+          assignmentSequence: get("assignmentSequence"),
         },
         actor: ctx.state.member!,
         requestId: ctx.state.requestId,
@@ -190,6 +223,41 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             value={study.counterbalancingScheme}
             hint="Recorded as text — use G*Power / your own generator and paste the result"
           />
+          <div class="grid gap-4 md:grid-cols-2">
+            <label class="flex flex-col gap-1 text-sm">
+              Condition assignment
+              <select
+                name="assignmentStrategy"
+                class="rounded-card border border-gray-300 px-3 py-2"
+              >
+                <option
+                  value="random_balanced"
+                  selected={study.assignmentStrategy === "random_balanced"}
+                >
+                  balanced random
+                </option>
+                <option
+                  value="manual_sequence"
+                  selected={study.assignmentStrategy === "manual_sequence"}
+                >
+                  manual sequence (counterbalanced)
+                </option>
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-sm">
+              Manual sequence
+              <span class="text-xs text-gray-500">
+                Condition names, comma-separated; cycled in order
+              </span>
+              <input
+                type="text"
+                name="assignmentSequence"
+                value={study.assignmentSequence}
+                placeholder="e.g. control, treatment, treatment, control"
+                class="rounded-card border border-gray-300 px-3 py-2"
+              />
+            </label>
+          </div>
           <div class="flex gap-2">
             <button
               type="submit"
@@ -237,6 +305,20 @@ export default define.page<typeof handler>(({ data, state, url }) => {
               </li>
             ))}
           </ul>
+          {(() => {
+            const plan = previewPlan(study, data.conditions);
+            return plan && (
+              <div class="rounded-card bg-gray-50 p-2 text-xs text-gray-600">
+                <p class="font-medium text-gray-700">
+                  Next assignments
+                  ({study.assignmentStrategy === "manual_sequence"
+                    ? "manual sequence"
+                    : "balanced random, illustrative"}):
+                </p>
+                <p class="mt-1">{plan.join(" → ")}</p>
+              </div>
+            );
+          })()}
           <form
             method="post"
             action={`/studies/${study.id}/conditions/add`}

@@ -156,7 +156,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       draft/irb_review and audited; duplicateStudy now copies design fields and conditions.
       Editor at `/studies/[id]/design` (list fields newline-separated); print-friendly one-pager
       at `/studies/[id]/onepager`; Design tab shows the summary.
-- [ ] 1.4 Condition assignment engine: random + manual counterbalanced assignment with audit trail + tests
+- [x] 1.4 Condition assignment engine: random + manual counterbalanced assignment with audit trail + tests
+      — engine is a pure, storage-free module (`lib/objects/assignment.ts`): balanced random
+      (uniform among least-assigned → group sizes never differ by >1, injectable RNG) and manual
+      counterbalanced sequences (validated names, cycled from a cursor). Per-study config
+      (`assignment_strategy` + `assignment_sequence`, migration 0006) is part of the design
+      (audited via design_updated, copied on duplicate, manual sequences validated at save);
+      design editor has the selector + a seeded preview of upcoming assignments.
+      ⚠ Deliberate deferral: Enrollments don't exist until Phase 2, so assignment-of-enrollment
+      rows + per-assignment audit events are wired in **2.5** using this engine — no premature
+      enrollment stub table was created.
 - [ ] 1.5 Documents: upload/create, version history + diff, review statuses, reviewer comments
 - [ ] 1.6 Oversight pathway selector: IRB-reviewed / IRB-exempt (reference required) / Internal Pilot (PI confirmation + justification → audit log; permanent PILOT badge; pilot data-quarantine flag)
 - [ ] 1.7 IRB workflow: merge-field document templates from Study fields, approval metadata (protocol #, dates), expiry warnings, recruiting guard (blocked until approved consent Document)

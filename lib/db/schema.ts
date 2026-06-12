@@ -149,6 +149,13 @@ export const designType = pgEnum("design_type", [
   "mixed",
 ]);
 
+// Condition assignment (spec §3.2): random or manually-defined
+// counterbalanced order. Enrollment wiring lands with Phase 2.5.
+export const assignmentStrategy = pgEnum("assignment_strategy", [
+  "random_balanced",
+  "manual_sequence",
+]);
+
 export const studies = pgTable("studies", {
   id: uuid("id").primaryKey().defaultRandom(),
   projectId: uuid("project_id")
@@ -174,6 +181,11 @@ export const studies = pgTable("studies", {
   exclusionCriteria: text("exclusion_criteria").notNull().default(""),
   /** Spec cut the Latin-square generator: the scheme is recorded as text. */
   counterbalancingScheme: text("counterbalancing_scheme").notNull().default(""),
+  assignmentStrategy: assignmentStrategy("assignment_strategy")
+    .notNull()
+    .default("random_balanced"),
+  /** Condition names in dispatch order (comma-separated), cycled. */
+  assignmentSequence: text("assignment_sequence").notNull().default(""),
   createdBy: uuid("created_by")
     .notNull()
     .references(() => members.id),

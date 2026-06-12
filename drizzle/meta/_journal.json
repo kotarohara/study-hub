@@ -43,6 +43,13 @@
       "when": 1781260999637,
       "tag": "0005_mysterious_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781261557364,
+      "tag": "0006_absent_klaw",
+      "breakpoints": true
     }
   ]
 }

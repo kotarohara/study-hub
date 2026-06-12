@@ -36,6 +36,8 @@ const EMPTY_DESIGN: DesignFields = {
   targetN: null,
   exclusionCriteria: "",
   counterbalancingScheme: "",
+  assignmentStrategy: "random_balanced",
+  assignmentSequence: "",
 };
 
 async function withStudy(
@@ -88,6 +90,7 @@ Deno.test("updateDesign: saves fields, audited, gated by lifecycle", async () =>
     const updated = await updateDesign(db, {
       study,
       fields: {
+        ...EMPTY_DESIGN,
         researchQuestions: "RQ1: does X?\nRQ2: does Y?",
         hypotheses: "H1: X improves Z",
         independentVariables: "interface variant",
@@ -164,6 +167,47 @@ Deno.test("conditions: ordered add, duplicate-name refusal, remove", async () =>
     });
     const remaining = await listConditions(db, study.id);
     assert.deepEqual(remaining.map((c) => c.name), ["treatment"]);
+  });
+});
+
+Deno.test("assignment config: manual sequence validated at save, copied on duplicate", async () => {
+  await withStudy(async ({ researcher, study }) => {
+    const db = await getTestDb();
+    await addCondition(db, { study, name: "A", actor: researcher });
+    await addCondition(db, { study, name: "B", actor: researcher });
+
+    // Sequence referencing a non-condition is refused.
+    await assert.rejects(
+      () =>
+        updateDesign(db, {
+          study,
+          fields: {
+            ...EMPTY_DESIGN,
+            assignmentStrategy: "manual_sequence",
+            assignmentSequence: "A, ghost",
+          },
+          actor: researcher,
+        }),
+      StudyError,
+    );
+
+    const updated = await updateDesign(db, {
+      study,
+      fields: {
+        ...EMPTY_DESIGN,
+        assignmentStrategy: "manual_sequence",
+        assignmentSequence: "A, B, B, A",
+      },
+      actor: researcher,
+    });
+    assert.equal(updated.assignmentStrategy, "manual_sequence");
+
+    const copy = await duplicateStudy(db, {
+      study: updated,
+      actor: researcher,
+    });
+    assert.equal(copy.assignmentStrategy, "manual_sequence");
+    assert.equal(copy.assignmentSequence, "A, B, B, A");
   });
 });
 
