@@ -1,11 +1,19 @@
-// Argon2id password hashing (spec §3.10). @node-rs/argon2 defaults follow
-// the OWASP recommendation (m=19456 KiB, t=2, p=1).
-import { hash, verify } from "@node-rs/argon2";
-
-const ARGON2ID = 2;
+// Argon2id password hashing (spec §3.10) with OWASP-recommended parameters
+// (m=19456 KiB, t=2, p=1). hash-wasm is used instead of a native binding:
+// the WASM core bundles cleanly in the server build and needs no
+// platform-specific binaries. Output is standard $argon2id$ encoded format.
+import { argon2id, argon2Verify } from "hash-wasm";
 
 export function hashPassword(password: string): Promise<string> {
-  return hash(password, { algorithm: ARGON2ID });
+  return argon2id({
+    password,
+    salt: crypto.getRandomValues(new Uint8Array(16)),
+    parallelism: 1,
+    iterations: 2,
+    memorySize: 19456,
+    hashLength: 32,
+    outputType: "encoded",
+  });
 }
 
 export async function verifyPassword(
@@ -13,7 +21,7 @@ export async function verifyPassword(
   password: string,
 ): Promise<boolean> {
   try {
-    return await verify(passwordHash, password);
+    return await argon2Verify({ password, hash: passwordHash });
   } catch {
     // Malformed hash (e.g. member has no password yet).
     return false;
