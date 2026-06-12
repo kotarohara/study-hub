@@ -5,6 +5,7 @@ import { getDb } from "../lib/db/client.ts";
 import { authenticate } from "../lib/auth/login.ts";
 import { createSession, sessionCookie } from "../lib/auth/session.ts";
 import { clientHost, loginLimiter } from "../lib/auth/limiters.ts";
+import { audit } from "../lib/audit/log.ts";
 
 interface Data {
   error?: string;
@@ -31,17 +32,33 @@ export const handler = define.handlers({
     }
     const form = await ctx.req.formData();
     const next = safeNext(form.get("next"));
+    const email = String(form.get("email") ?? "");
     const member = await authenticate(
       getDb(),
-      String(form.get("email") ?? ""),
+      email,
       String(form.get("password") ?? ""),
     );
+    const auditBase = {
+      requestId: ctx.state.requestId,
+      ip: clientHost(ctx.info),
+    };
     if (!member) {
+      // Member emails are lab-internal account ids, not participant PII.
+      await audit(getDb(), {
+        ...auditBase,
+        action: "auth.login_failed",
+        details: { email: email.trim().toLowerCase() },
+      });
       return page<Data>(
         { error: "Invalid email or password.", next },
         { status: 401 },
       );
     }
+    await audit(getDb(), {
+      ...auditBase,
+      action: "auth.login",
+      actorId: member.id,
+    });
     const { token, expiresAt } = await createSession(getDb(), member.id);
     return new Response(null, {
       status: 303,

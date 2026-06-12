@@ -15,6 +15,13 @@
       "when": 1781239063045,
       "tag": "0001_mute_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781239517206,
+      "tag": "0002_white_justin_hammer",
+      "breakpoints": true
     }
   ]
 }

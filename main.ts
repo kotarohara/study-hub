@@ -3,6 +3,7 @@ import type { State } from "./utils.ts";
 import { getConfig } from "./lib/config.ts";
 import { registerBackupCron } from "./lib/jobs/backup_cron.ts";
 import { sessionMiddleware } from "./lib/auth/middleware.ts";
+import { AUDIT_RULES, createAuditMiddleware } from "./lib/audit/middleware.ts";
 
 registerBackupCron(getConfig());
 
@@ -19,5 +20,7 @@ app.use((ctx) => {
 });
 
 app.use(sessionMiddleware);
+
+app.use(createAuditMiddleware(AUDIT_RULES));
 
 app.fsRoutes();

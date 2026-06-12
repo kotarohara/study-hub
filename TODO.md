@@ -96,8 +96,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       `rateLimit()` middleware factory ready for public `p/` routes in Phase 2.
 
 ### 0.5 Audit log
-- [ ] Append-only `audit_log` table (no UPDATE/DELETE grants) + write helper
-- [ ] Audit middleware covering: PII views/exports, consent changes, deletions, payment approvals + tests proving append-only behavior
+- [x] Append-only `audit_log` table (no UPDATE/DELETE grants) + write helper
+      — REVOKE alone cannot bind the table owner, so immutability is enforced with BEFORE
+      UPDATE/DELETE/TRUNCATE triggers that raise (migration 0002) + REVOKE from PUBLIC.
+      `audit()` helper in `lib/audit/log.ts`; actor_id has no FK so entries outlive members.
+- [x] Audit middleware covering: PII views/exports, consent changes, deletions, payment approvals + tests proving append-only behavior
+      — `createAuditMiddleware(rules)` (URLPattern-based, logs after 2xx/3xx; matcher unit-tested)
+      wired in main.ts; handler-level `audit()` calls for actions that must not go unrecorded
+      (login success/failure, invite create/accept). PII-view/export/consent/payment rules get
+      added to AUDIT_RULES as those routes land (Phases 2/4). Integration tests prove UPDATE,
+      DELETE, TRUNCATE and raw-SQL tampering are all rejected by the database.
 
 ### 0.6 OOUI shell
 - [ ] App layout: global nav listing object collections, design tokens, status-badge component

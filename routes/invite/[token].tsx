@@ -10,6 +10,7 @@ import {
 import { validatePassword } from "../../lib/auth/password.ts";
 import { createSession, sessionCookie } from "../../lib/auth/session.ts";
 import { clientHost, inviteAcceptLimiter } from "../../lib/auth/limiters.ts";
+import { audit } from "../../lib/audit/log.ts";
 
 interface Data {
   valid: boolean;
@@ -53,6 +54,14 @@ export const handler = define.handlers({
         token: ctx.params.token,
         name,
         password,
+      });
+      await audit(db, {
+        action: "member.invite_accepted",
+        actorId: member.id,
+        objectType: "invite",
+        objectId: invite.id,
+        requestId: ctx.state.requestId,
+        ip: clientHost(ctx.info),
       });
       const { token, expiresAt } = await createSession(db, member.id);
       return new Response(null, {

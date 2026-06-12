@@ -7,6 +7,8 @@ import { getConfig } from "../../lib/config.ts";
 import { getDb } from "../../lib/db/client.ts";
 import { createInvite, InviteError } from "../../lib/auth/invite.ts";
 import { hasRole } from "../../lib/auth/roles.ts";
+import { clientHost } from "../../lib/auth/limiters.ts";
+import { audit } from "../../lib/audit/log.ts";
 
 const InviteBody = z.object({
   email: z.email(),
@@ -32,6 +34,15 @@ export const handler = define.handlers({
         email: body.data.email,
         role: body.data.role,
         invitedBy: member.id,
+      });
+      await audit(getDb(), {
+        action: "member.invite_created",
+        actorId: member.id,
+        objectType: "invite",
+        objectId: invite.id,
+        details: { role: invite.role },
+        requestId: ctx.state.requestId,
+        ip: clientHost(ctx.info),
       });
       return Response.json(
         {
