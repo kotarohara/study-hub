@@ -168,6 +168,10 @@ export const studies = pgTable("studies", {
   oversightPathway: oversightPathway("oversight_pathway")
     .notNull()
     .default("irb_reviewed"),
+  /** Required when irb_exempt: the IRB's exemption determination/reference. */
+  irbExemptionReference: text("irb_exemption_reference").notNull().default(""),
+  /** Required when internal_pilot: the PI's recorded justification. */
+  pilotJustification: text("pilot_justification").notNull().default(""),
   /** Status before archiving, so unarchive can restore it. */
   archivedFrom: studyStatus("archived_from"),
   // Structured design fields (spec §3.2, simplified editor). List-like

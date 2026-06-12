@@ -9,9 +9,16 @@ import {
   createStudy,
   METHODOLOGIES,
   type Methodology,
+  type OversightPathway,
   StudyError,
 } from "../../lib/objects/studies.ts";
 import { Layout } from "../../components/Layout.tsx";
+
+const PATHWAYS: OversightPathway[] = [
+  "irb_reviewed",
+  "irb_exempt",
+  "internal_pilot",
+];
 
 interface Data {
   project: Project;
@@ -54,12 +61,25 @@ export const handler = define.handlers({
       );
     }
 
+    const rawPathway = String(form.get("pathway") ?? "irb_reviewed");
+    if (!PATHWAYS.includes(rawPathway as OversightPathway)) {
+      return page<Data>(
+        { project, error: "Pick an oversight pathway.", name, description },
+        { status: 400 },
+      );
+    }
+
     try {
       const study = await createStudy(db, {
         project,
         name,
         description,
         methodology: methodology as Methodology,
+        pathway: {
+          pathway: rawPathway as OversightPathway,
+          exemptionReference: String(form.get("exemptionReference") ?? ""),
+          justification: String(form.get("justification") ?? ""),
+        },
         createdBy: me,
         requestId: ctx.state.requestId,
         ip: clientHost(ctx.info),
@@ -124,11 +144,56 @@ export default define.page<typeof handler>(({ data, state, url }) => (
           {data.description ?? ""}
         </textarea>
       </label>
-      <p class="text-xs text-gray-500">
-        New studies start as{" "}
-        <strong>IRB-reviewed drafts</strong>. The oversight-pathway selector
-        (IRB-exempt, internal pilot) arrives in Phase 1.6.
-      </p>
+      <fieldset class="space-y-2 rounded-card border border-gray-200 p-3">
+        <legend class="px-1 text-sm font-medium">Oversight pathway</legend>
+        <label class="flex items-start gap-2 text-sm">
+          <input type="radio" name="pathway" value="irb_reviewed" checked />
+          <span>
+            <strong>IRB-reviewed</strong>{" "}
+            (default) — recruiting unlocks once an approved consent document
+            exists.
+          </span>
+        </label>
+        <label class="flex items-start gap-2 text-sm">
+          <input type="radio" name="pathway" value="irb_exempt" />
+          <span>
+            <strong>IRB-exempt</strong>{" "}
+            — your IRB formally exempted this study; the reference is required.
+          </span>
+        </label>
+        <input
+          type="text"
+          name="exemptionReference"
+          placeholder="Exemption reference / determination"
+          class="ml-6 w-full rounded-card border border-gray-300 px-3 py-1.5 text-sm"
+        />
+        {state.member!.role === "pi"
+          ? (
+            <>
+              <label class="flex items-start gap-2 text-sm">
+                <input type="radio" name="pathway" value="internal_pilot" />
+                <span>
+                  <strong>Internal Pilot</strong>{" "}
+                  — no IRB review. Carries a permanent PILOT badge; data is
+                  quarantined; no public recruitment. Your confirmation and
+                  justification are recorded in the audit log.
+                </span>
+              </label>
+              <textarea
+                name="justification"
+                rows={2}
+                placeholder="PI justification (required for pilots)"
+                class="ml-6 w-full rounded-card border border-gray-300 px-3 py-1.5 text-sm"
+              >
+              </textarea>
+            </>
+          )
+          : (
+            <p class="ml-6 text-xs text-gray-500">
+              Internal Pilot (no IRB) can only be declared by the PI.
+            </p>
+          )}
+      </fieldset>
       <button
         type="submit"
         class="rounded-card bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"

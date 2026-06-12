@@ -11,6 +11,7 @@ import {
 } from "../../../lib/objects/studies.ts";
 import { listConditions } from "../../../lib/objects/design.ts";
 import { statusView } from "../../../lib/ooui/status.ts";
+import { PilotBanner } from "../../../components/ooui/PilotBanner.tsx";
 
 interface Data {
   found: StudyWithProject;
@@ -78,6 +79,11 @@ export default define.page<typeof handler>(({ data }) => {
         </button>
       </div>
 
+      {study.oversightPathway === "internal_pilot" && (
+        <div class="mb-4">
+          <PilotBanner />
+        </div>
+      )}
       <header class="border-b border-gray-300 pb-4">
         <p class="text-xs uppercase tracking-wide text-gray-500">
           Study design one-pager · {project.name}

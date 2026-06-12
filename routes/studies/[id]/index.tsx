@@ -5,10 +5,12 @@ import {
   allowedTransitions,
   EDITABLE_STATES,
   getStudyFor,
+  isPilotStudy,
   STUDY_STEPS,
   type StudyStatus,
   type StudyWithProject,
 } from "../../../lib/objects/studies.ts";
+import { PilotBanner } from "../../../components/ooui/PilotBanner.tsx";
 import { listConditions } from "../../../lib/objects/design.ts";
 import { listDocumentsOfStudy } from "../../../lib/objects/documents.ts";
 import type { Condition, Document } from "../../../lib/db/schema.ts";
@@ -88,10 +90,18 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         enabledIn: EDITABLE_STATES,
       },
       {
+        id: "pathway",
+        label: "Change pathway",
+        href: `/studies/${study.id}/pathway`,
+        method: "get",
+        minRole: "pi",
+        enabledIn: EDITABLE_STATES,
+      },
+      {
         id: "duplicate",
         label: "Duplicate",
         href: `/studies/${study.id}/duplicate`,
-        minRole: "researcher",
+        minRole: isPilotStudy(study) ? "pi" : "researcher",
         confirm:
           "Duplicate this study? The design is copied into a new draft; participants and data never carry over.",
       },
@@ -150,14 +160,33 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         baseHref={`/studies/${study.id}`}
         actions={actions}
       >
+        {isPilotStudy(study) && (
+          <div class="mb-4">
+            <PilotBanner />
+          </div>
+        )}
         <div class="mb-4">
           <Stepper steps={STUDY_STEPS} current={study.status} />
         </div>
 
         {data.activeTab === "overview" && (
-          <p class="max-w-2xl whitespace-pre-wrap text-sm text-gray-700">
-            {study.description || "No description."}
-          </p>
+          <div class="max-w-2xl space-y-3">
+            <p class="whitespace-pre-wrap text-sm text-gray-700">
+              {study.description || "No description."}
+            </p>
+            {study.oversightPathway === "irb_exempt" && (
+              <p class="text-sm text-gray-600">
+                <span class="font-medium">IRB exemption reference:</span>{" "}
+                {study.irbExemptionReference}
+              </p>
+            )}
+            {isPilotStudy(study) && (
+              <p class="text-sm text-gray-600">
+                <span class="font-medium">PI justification:</span>{" "}
+                {study.pilotJustification}
+              </p>
+            )}
+          </div>
         )}
         {data.activeTab === "design" && (
           <div class="max-w-3xl space-y-4">

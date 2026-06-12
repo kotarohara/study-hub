@@ -15,6 +15,7 @@ import {
   type Study,
 } from "../db/schema.ts";
 import { audit } from "../audit/log.ts";
+import { hasRole } from "../auth/roles.ts";
 import { getProjectFor, listProjectsFor } from "./projects.ts";
 
 export type StudyStatus = Study["status"];
@@ -64,6 +65,105 @@ export interface AuditCtx {
   ip?: string;
 }
 
+// ---------- Oversight pathway (spec §3.3) ----------
+
+export type OversightPathway = Study["oversightPathway"];
+
+export function isPilotStudy(study: Study): boolean {
+  return study.oversightPathway === "internal_pilot";
+}
+
+export interface PathwayInput {
+  pathway: OversightPathway;
+  exemptionReference?: string;
+  justification?: string;
+}
+
+/**
+ * Validates a pathway declaration (spec §3.3): IRB-exempt requires the
+ * exemption reference; Internal Pilot requires PI confirmation (the actor
+ * IS the PI) plus a recorded justification. StudyHub records the declared
+ * status; whether a pilot truly needs no review is the institution's call —
+ * which is exactly why the choice is PI-gated and audited.
+ */
+export function validatePathway(
+  input: PathwayInput,
+  actorRole: Member["role"],
+): { irbExemptionReference: string; pilotJustification: string } {
+  const reference = input.exemptionReference?.trim() ?? "";
+  const justification = input.justification?.trim() ?? "";
+
+  switch (input.pathway) {
+    case "irb_reviewed":
+      return { irbExemptionReference: "", pilotJustification: "" };
+    case "irb_exempt":
+      if (!reference) {
+        throw new StudyError(
+          "IRB-exempt studies require the exemption reference/determination.",
+        );
+      }
+      return { irbExemptionReference: reference, pilotJustification: "" };
+    case "internal_pilot":
+      if (!hasRole(actorRole, "pi")) {
+        throw new StudyError(
+          "Only the PI can declare an Internal Pilot (no IRB review).",
+        );
+      }
+      if (!justification) {
+        throw new StudyError(
+          "Internal Pilots require a short justification, recorded in the audit log.",
+        );
+      }
+      return { irbExemptionReference: "", pilotJustification: justification };
+  }
+}
+
+/** Changes the pathway of an existing study. PI-only, and only while the
+ * design is still editable — after that, "Promote to full study" (1.8) is
+ * the way out of a pilot. */
+export async function setOversightPathway(
+  db: Db,
+  opts: { study: Study; input: PathwayInput; actor: Member } & AuditCtx,
+): Promise<Study> {
+  if (!hasRole(opts.actor.role, "pi")) {
+    throw new StudyError("Only the PI can change the oversight pathway.");
+  }
+  if (!EDITABLE_STATES.includes(opts.study.status)) {
+    throw new StudyError(
+      `The pathway of a study in "${opts.study.status}" cannot be changed.`,
+    );
+  }
+  const fields = validatePathway(opts.input, opts.actor.role);
+  const [updated] = await db
+    .update(studies)
+    .set({
+      oversightPathway: opts.input.pathway,
+      ...fields,
+      updatedAt: new Date(),
+    })
+    .where(eq(studies.id, opts.study.id))
+    .returning();
+  await audit(db, {
+    action: "study.pathway_changed",
+    actorId: opts.actor.id,
+    objectType: "study",
+    objectId: opts.study.id,
+    details: {
+      from: opts.study.oversightPathway,
+      to: opts.input.pathway,
+      ...(fields.irbExemptionReference
+        ? { exemptionReference: fields.irbExemptionReference }
+        : {}),
+      ...(fields.pilotJustification
+        ? { justification: fields.pilotJustification }
+        : {}),
+    },
+    requestId: opts.requestId,
+    ip: opts.ip,
+  });
+  return updated;
+}
+
 export interface StudyWithProject {
   study: Study;
   project: Project;
@@ -104,6 +204,9 @@ export async function createStudy(
     name: string;
     description?: string;
     methodology: Methodology;
+    /** Oversight pathway declared at creation (spec §3.3); defaults to
+     * irb_reviewed. Internal Pilot requires the creator to be the PI. */
+    pathway?: PathwayInput;
     createdBy: Member;
   } & AuditCtx,
 ): Promise<Study> {
@@ -112,6 +215,8 @@ export async function createStudy(
   if (opts.project.status !== "active") {
     throw new StudyError("Studies cannot be added to an archived project.");
   }
+  const pathway: PathwayInput = opts.pathway ?? { pathway: "irb_reviewed" };
+  const pathwayFields = validatePathway(pathway, opts.createdBy.role);
 
   return await db.transaction(async (tx) => {
     const [study] = await tx
@@ -121,6 +226,8 @@ export async function createStudy(
         name,
         description: opts.description?.trim() ?? "",
         methodology: opts.methodology,
+        oversightPathway: pathway.pathway,
+        ...pathwayFields,
         createdBy: opts.createdBy.id,
       })
       .returning();
@@ -129,7 +236,17 @@ export async function createStudy(
       actorId: opts.createdBy.id,
       objectType: "study",
       objectId: study.id,
-      details: { projectId: opts.project.id, methodology: opts.methodology },
+      details: {
+        projectId: opts.project.id,
+        methodology: opts.methodology,
+        pathway: pathway.pathway,
+        ...(pathwayFields.pilotJustification
+          ? { justification: pathwayFields.pilotJustification }
+          : {}),
+        ...(pathwayFields.irbExemptionReference
+          ? { exemptionReference: pathwayFields.irbExemptionReference }
+          : {}),
+      },
       requestId: opts.requestId,
       ip: opts.ip,
     });
@@ -258,6 +375,14 @@ export async function duplicateStudy(
   db: Db,
   opts: { study: Study; actor: Member } & AuditCtx,
 ): Promise<Study> {
+  // Duplicating a pilot reproduces its no-IRB declaration, so it carries the
+  // same PI gate as creating one. "Promote to full study" (1.8) is the path
+  // to an IRB-reviewed copy.
+  if (isPilotStudy(opts.study) && !hasRole(opts.actor.role, "pi")) {
+    throw new StudyError(
+      "Only the PI can duplicate an Internal Pilot. Use “Promote to full study” for an IRB-reviewed copy.",
+    );
+  }
   return await db.transaction(async (tx) => {
     const [copy] = await tx
       .insert(studies)
@@ -267,6 +392,8 @@ export async function duplicateStudy(
         description: opts.study.description,
         methodology: opts.study.methodology,
         oversightPathway: opts.study.oversightPathway,
+        irbExemptionReference: opts.study.irbExemptionReference,
+        pilotJustification: opts.study.pilotJustification,
         researchQuestions: opts.study.researchQuestions,
         hypotheses: opts.study.hypotheses,
         independentVariables: opts.study.independentVariables,

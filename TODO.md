@@ -176,7 +176,15 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       documents (latest version → fresh v1 draft). Routes: `/documents` collection, `new`,
       `[id]` (Content/Versions/Comments tabs), `diff`, `transition`, `versions/new`, `download`;
       Documents tabs on project + study detail; nav enabled. Comments: assistant+.
-- [ ] 1.6 Oversight pathway selector: IRB-reviewed / IRB-exempt (reference required) / Internal Pilot (PI confirmation + justification → audit log; permanent PILOT badge; pilot data-quarantine flag)
+- [x] 1.6 Oversight pathway selector: IRB-reviewed / IRB-exempt (reference required) / Internal Pilot (PI confirmation + justification → audit log; permanent PILOT badge; pilot data-quarantine flag)
+      — `irb_exemption_reference` + `pilot_justification` columns (migration 0008);
+      `validatePathway` enforces the rules (exempt needs reference; pilot needs PI + justification,
+      both recorded in audit details). Selector on `/studies/new` (pilot option PI-only);
+      `/studies/[id]/pathway` PI-only change page, locked once past draft/irb_review ("Promote to
+      full study" in 1.8 is the way out after that). Duplicating a pilot is PI-only (it reproduces
+      the no-IRB declaration). PilotBanner on study detail + one-pager; pilot badge on the studies
+      collection and project-tab chips. `isPilotStudy()` is the quarantine flag for Phases 2/4
+      (screener block + dataset/export exclusion enforced there).
 - [ ] 1.7 IRB workflow: merge-field document templates from Study fields, approval metadata (protocol #, dates), expiry warnings, recruiting guard (blocked until approved consent Document)
 - [ ] 1.8 "Promote to full study" action (duplicate into fresh IRB-reviewed Study, zero data carry-over) + tests
 - [ ] 1.9 Milestones/Tasks: CRUD, dependencies + blocking, methodology templates
