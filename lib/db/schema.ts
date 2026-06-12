@@ -563,7 +563,9 @@ export const consents = pgTable("consents", {
     .references(() => enrollments.id, { onDelete: "cascade" }),
   documentId: uuid("document_id")
     .notNull()
-    .references(() => documents.id),
+    // Cascade: documents are only ever deleted via project deletion,
+    // which removes the enrollments (and these rows) anyway.
+    .references(() => documents.id, { onDelete: "cascade" }),
   documentVersionNumber: integer("document_version_number").notNull(),
   /** PII: typed-name e-signature (encrypted at rest). */
   signatureName: encryptedText("signature_name").notNull(),
