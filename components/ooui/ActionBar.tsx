@@ -42,11 +42,7 @@ export function ActionBar(props: { actions: ResolvedAction[] }) {
               method="post"
               action={action.href}
               class="inline"
-              {...(action.confirm
-                ? {
-                  onsubmit: `return confirm(${JSON.stringify(action.confirm)})`,
-                }
-                : {})}
+              data-confirm={action.confirm}
             >
               <button type="submit" class={classes(action)}>
                 {action.label}

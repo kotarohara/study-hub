@@ -55,10 +55,6 @@ function Section(props: {
   );
 }
 
-// Server-rendered inline handler, spread because Preact's types only accept
-// function-typed onClick (same pattern as ActionBar's confirm onsubmit).
-const printOnClick = { onclick: "window.print()" };
-
 export default define.page<typeof handler>(({ data }) => {
   const { study, project } = data.found;
   return (
@@ -73,7 +69,7 @@ export default define.page<typeof handler>(({ data }) => {
         <button
           type="button"
           class="rounded-card border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
-          {...printOnClick}
+          data-print
         >
           Print / save as PDF
         </button>

@@ -78,10 +78,7 @@ export function MilestoneList(props: {
                   <form
                     method="post"
                     action={`/milestones/${milestone.id}/delete`}
-                    {...{
-                      onsubmit:
-                        "return confirm('Delete this milestone? Recorded in the audit log.')",
-                    }}
+                    data-confirm="Delete this milestone? Recorded in the audit log."
                   >
                     <button
                       type="submit"

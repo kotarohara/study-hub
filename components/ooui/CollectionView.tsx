@@ -139,11 +139,7 @@ export function CollectionView<T>(props: {
               action={action.href}
               id={formId}
               class="inline"
-              {...(action.confirm
-                ? {
-                  onsubmit: `return confirm(${JSON.stringify(action.confirm)})`,
-                }
-                : {})}
+              data-confirm={action.confirm}
             >
               <button
                 type="submit"
