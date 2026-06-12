@@ -39,8 +39,11 @@ services:
 
   # One-shot job: creates the dev buckets and enables versioning on the
   # backups bucket (mirrors the versioned S3 backup bucket in production).
+  # Behind a profile so `up -d --wait` doesn't treat its exit as a failure;
+  # invoked via `docker compose run --rm minio-init` (see the stack:up task).
   minio-init:
     image: minio/mc:latest
+    profiles: ["init"]
     depends_on:
       minio:
         condition: service_healthy

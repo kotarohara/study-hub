@@ -8,7 +8,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: denoland/setup-deno@v2
         with:
@@ -21,7 +21,7 @@ jobs:
         run: deno task check
 
       - name: Start local stack (Postgres, MinIO, Mailpit)
-        run: docker compose -f compose.dev.yml up -d --wait
+        run: deno task stack:up
 
       - name: Build
         run: deno task build

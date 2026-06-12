@@ -6,7 +6,7 @@
     "start": "deno serve -A _fresh/server.js",
     "check": "deno fmt --check . && deno lint . && deno check",
     "test": "deno test -A",
-    "stack:up": "docker compose -f compose.dev.yml up -d --wait",
+    "stack:up": "docker compose -f compose.dev.yml up -d --wait && docker compose -f compose.dev.yml run --rm minio-init",
     "stack:down": "docker compose -f compose.dev.yml down"
   },
   "lint": {
