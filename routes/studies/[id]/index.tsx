@@ -107,6 +107,17 @@ export default define.page<typeof handler>(({ data, state, url }) => {
           minRole: "pi" as const,
         }]
         : []),
+      ...(isPilotStudy(study)
+        ? [{
+          id: "promote",
+          label: "Promote to full study",
+          href: `/studies/${study.id}/promote`,
+          tone: "primary" as const,
+          minRole: "researcher" as const,
+          confirm:
+            "Create an IRB-reviewed copy of this pilot's design? Pilot data never carries over.",
+        }]
+        : []),
       {
         id: "duplicate",
         label: "Duplicate",

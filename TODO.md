@@ -194,7 +194,12 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       (30-day window); Discord/email expiry alerts arrive with jobs in 3.x. **Recruiting guard**
       in transitionStudy: irb_reviewed studies need an APPROVED consent_form document AND an
       unexpired IRB approval to enter recruiting (exempt/pilot unaffected).
-- [ ] 1.8 "Promote to full study" action (duplicate into fresh IRB-reviewed Study, zero data carry-over) + tests
+- [x] 1.8 "Promote to full study" action (duplicate into fresh IRB-reviewed Study, zero data carry-over) + tests
+      — `promoteToFullStudy` (pilots only, researcher+ since the result is the standard pathway):
+      shares `copyStudyTx` with duplicate; copies design/conditions/documents into a fresh
+      irb_reviewed draft named "… (full study)" with no pilot justification and no IRB metadata.
+      The pilot itself is untouched (archive it separately). Audited as `study.promoted`.
+      Primary action with confirm on pilot study detail pages.
 - [ ] 1.9 Milestones/Tasks: CRUD, dependencies + blocking, methodology templates
 - [ ] 1.10 TimelineGantt island + project roll-up calendar
 

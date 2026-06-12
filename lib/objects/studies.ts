@@ -392,11 +392,99 @@ export async function unarchiveStudy(
   return updated;
 }
 
+/** Shared copy logic for duplicate/promote: design, conditions and
+ * study-attached documents (latest version → fresh v1 draft) — never
+ * participants, data, approvals or IRB metadata. */
+async function copyStudyTx(
+  tx: Parameters<Parameters<Db["transaction"]>[0]>[0],
+  source: Study,
+  overrides: {
+    name: string;
+    oversightPathway: Study["oversightPathway"];
+    irbExemptionReference: string;
+    pilotJustification: string;
+  },
+  actor: Member,
+): Promise<Study> {
+  const [copy] = await tx
+    .insert(studies)
+    .values({
+      projectId: source.projectId,
+      name: overrides.name,
+      description: source.description,
+      methodology: source.methodology,
+      oversightPathway: overrides.oversightPathway,
+      irbExemptionReference: overrides.irbExemptionReference,
+      pilotJustification: overrides.pilotJustification,
+      researchQuestions: source.researchQuestions,
+      hypotheses: source.hypotheses,
+      independentVariables: source.independentVariables,
+      dependentVariables: source.dependentVariables,
+      designType: source.designType,
+      targetN: source.targetN,
+      exclusionCriteria: source.exclusionCriteria,
+      counterbalancingScheme: source.counterbalancingScheme,
+      assignmentStrategy: source.assignmentStrategy,
+      assignmentSequence: source.assignmentSequence,
+      createdBy: actor.id,
+    })
+    .returning();
+  const sourceConditions = await tx
+    .select()
+    .from(conditions)
+    .where(eq(conditions.studyId, source.id));
+  if (sourceConditions.length > 0) {
+    await tx.insert(conditions).values(
+      sourceConditions.map((c) => ({
+        studyId: copy.id,
+        name: c.name,
+        position: c.position,
+      })),
+    );
+  }
+  // Copy study-attached documents: latest version becomes v1 of a fresh
+  // DRAFT document — approval status never carries over to a new study.
+  const sourceDocs = await tx
+    .select()
+    .from(documents)
+    .where(eq(documents.studyId, source.id));
+  for (const doc of sourceDocs) {
+    const latest = await tx.query.documentVersions.findFirst({
+      where: and(
+        eq(documentVersions.documentId, doc.id),
+        eq(documentVersions.versionNumber, doc.currentVersion),
+      ),
+    });
+    const [docCopy] = await tx
+      .insert(documents)
+      .values({
+        projectId: doc.projectId,
+        studyId: copy.id,
+        title: doc.title,
+        kind: doc.kind,
+        currentVersion: 1,
+        createdBy: actor.id,
+      })
+      .returning();
+    if (latest) {
+      await tx.insert(documentVersions).values({
+        documentId: docCopy.id,
+        versionNumber: 1,
+        content: latest.content,
+        fileKey: latest.fileKey, // immutable blob, safe to share
+        fileName: latest.fileName,
+        changeRationale: `Copied from study "${source.name}"`,
+        createdBy: actor.id,
+      });
+    }
+  }
+  return copy;
+}
+
 /**
  * Duplication is the primary path for "new study like the last one"
  * (spec §2.2 #6): copies the design — never participants or data — into a
- * fresh draft. Extend to copy documents (1.5) and milestones (1.9) as
- * those object types land.
+ * fresh draft. Extend to copy milestones (1.9) when those land.
  */
 export async function duplicateStudy(
   db: Db,
@@ -411,78 +499,12 @@ export async function duplicateStudy(
     );
   }
   return await db.transaction(async (tx) => {
-    const [copy] = await tx
-      .insert(studies)
-      .values({
-        projectId: opts.study.projectId,
-        name: `${opts.study.name} (copy)`,
-        description: opts.study.description,
-        methodology: opts.study.methodology,
-        oversightPathway: opts.study.oversightPathway,
-        irbExemptionReference: opts.study.irbExemptionReference,
-        pilotJustification: opts.study.pilotJustification,
-        researchQuestions: opts.study.researchQuestions,
-        hypotheses: opts.study.hypotheses,
-        independentVariables: opts.study.independentVariables,
-        dependentVariables: opts.study.dependentVariables,
-        designType: opts.study.designType,
-        targetN: opts.study.targetN,
-        exclusionCriteria: opts.study.exclusionCriteria,
-        counterbalancingScheme: opts.study.counterbalancingScheme,
-        assignmentStrategy: opts.study.assignmentStrategy,
-        assignmentSequence: opts.study.assignmentSequence,
-        createdBy: opts.actor.id,
-      })
-      .returning();
-    const sourceConditions = await tx
-      .select()
-      .from(conditions)
-      .where(eq(conditions.studyId, opts.study.id));
-    if (sourceConditions.length > 0) {
-      await tx.insert(conditions).values(
-        sourceConditions.map((c) => ({
-          studyId: copy.id,
-          name: c.name,
-          position: c.position,
-        })),
-      );
-    }
-    // Copy study-attached documents: latest version becomes v1 of a fresh
-    // DRAFT document — approval status never carries over to a new study.
-    const sourceDocs = await tx
-      .select()
-      .from(documents)
-      .where(eq(documents.studyId, opts.study.id));
-    for (const doc of sourceDocs) {
-      const latest = await tx.query.documentVersions.findFirst({
-        where: and(
-          eq(documentVersions.documentId, doc.id),
-          eq(documentVersions.versionNumber, doc.currentVersion),
-        ),
-      });
-      const [docCopy] = await tx
-        .insert(documents)
-        .values({
-          projectId: doc.projectId,
-          studyId: copy.id,
-          title: doc.title,
-          kind: doc.kind,
-          currentVersion: 1,
-          createdBy: opts.actor.id,
-        })
-        .returning();
-      if (latest) {
-        await tx.insert(documentVersions).values({
-          documentId: docCopy.id,
-          versionNumber: 1,
-          content: latest.content,
-          fileKey: latest.fileKey, // immutable blob, safe to share
-          fileName: latest.fileName,
-          changeRationale: `Duplicated from study "${opts.study.name}"`,
-          createdBy: opts.actor.id,
-        });
-      }
-    }
+    const copy = await copyStudyTx(tx, opts.study, {
+      name: `${opts.study.name} (copy)`,
+      oversightPathway: opts.study.oversightPathway,
+      irbExemptionReference: opts.study.irbExemptionReference,
+      pilotJustification: opts.study.pilotJustification,
+    }, opts.actor);
     await audit(tx, {
       action: "study.duplicated",
       actorId: opts.actor.id,
@@ -493,6 +515,39 @@ export async function duplicateStudy(
       ip: opts.ip,
     });
     return copy;
+  });
+}
+
+/**
+ * "Promote to full study" (spec §3.3): duplicates an Internal Pilot's
+ * design into a fresh IRB-reviewed draft. Pilot data NEVER carries over —
+ * the copy starts with no enrollments, sessions or datasets, and no pilot
+ * flag. The pilot itself is left untouched (archive it separately).
+ */
+export async function promoteToFullStudy(
+  db: Db,
+  opts: { study: Study; actor: Member } & AuditCtx,
+): Promise<Study> {
+  if (!isPilotStudy(opts.study)) {
+    throw new StudyError("Only Internal Pilot studies can be promoted.");
+  }
+  return await db.transaction(async (tx) => {
+    const promoted = await copyStudyTx(tx, opts.study, {
+      name: `${opts.study.name} (full study)`,
+      oversightPathway: "irb_reviewed",
+      irbExemptionReference: "",
+      pilotJustification: "",
+    }, opts.actor);
+    await audit(tx, {
+      action: "study.promoted",
+      actorId: opts.actor.id,
+      objectType: "study",
+      objectId: promoted.id,
+      details: { sourceStudyId: opts.study.id },
+      requestId: opts.requestId,
+      ip: opts.ip,
+    });
+    return promoted;
   });
 }
 

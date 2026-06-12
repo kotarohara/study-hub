@@ -16,11 +16,16 @@ import {
   createStudy,
   duplicateStudy,
   isPilotStudy,
+  promoteToFullStudy,
   setOversightPathway,
   StudyError,
   transitionStudy,
   validatePathway,
 } from "./studies.ts";
+import { updateDesign } from "./design.ts";
+import { addCondition, listConditions } from "./design.ts";
+import { listDocumentsOfStudy } from "./documents.ts";
+import { createDocument } from "./documents.ts";
 
 Deno.test("validatePathway: exemption reference and pilot PI gate", () => {
   assert.deepEqual(validatePathway({ pathway: "irb_reviewed" }, "researcher"), {
@@ -202,5 +207,86 @@ Deno.test("duplicating a pilot is PI-only and keeps the declaration", async () =
     const copy = await duplicateStudy(db, { study: pilot, actor: pi });
     assert.ok(isPilotStudy(copy));
     assert.equal(copy.pilotJustification, "tooling check");
+  });
+});
+
+Deno.test("promote to full study: pilot design → IRB-reviewed draft", async () => {
+  await withEnv(async ({ pi, researcher, project }) => {
+    const db = await getTestDb();
+    let pilot = await createStudy(db, {
+      project,
+      name: "Pilot run",
+      description: "the pilot design",
+      methodology: "lab_experiment",
+      pathway: { pathway: "internal_pilot", justification: "dry run" },
+      createdBy: pi,
+    });
+    pilot = await updateDesign(db, {
+      study: pilot,
+      fields: {
+        researchQuestions: "RQ: works?",
+        hypotheses: "",
+        independentVariables: "",
+        dependentVariables: "",
+        designType: "within",
+        targetN: 6,
+        exclusionCriteria: "",
+        counterbalancingScheme: "",
+        assignmentStrategy: "random_balanced",
+        assignmentSequence: "",
+      },
+      actor: pi,
+    });
+    await addCondition(db, { study: pilot, name: "A", actor: pi });
+    await createDocument(db, {
+      project,
+      study: pilot,
+      title: "Consent draft",
+      kind: "consent_form",
+      initialVersion: { content: "pilot consent" },
+      createdBy: pi,
+    });
+
+    // Promotion is for pilots only.
+    const regular = await createStudy(db, {
+      project,
+      name: "Regular",
+      methodology: "survey",
+      createdBy: researcher,
+    });
+    await assert.rejects(
+      () => promoteToFullStudy(db, { study: regular, actor: researcher }),
+      StudyError,
+    );
+
+    // A researcher can promote (the result is the standard pathway).
+    const promoted = await promoteToFullStudy(db, {
+      study: pilot,
+      actor: researcher,
+    });
+    assert.equal(promoted.name, "Pilot run (full study)");
+    assert.equal(promoted.oversightPathway, "irb_reviewed");
+    assert.equal(promoted.pilotJustification, "");
+    assert.equal(promoted.status, "draft");
+    assert.equal(promoted.irbProtocolNumber, ""); // needs its own approval
+    assert.equal(promoted.researchQuestions, "RQ: works?");
+    assert.equal(promoted.targetN, 6);
+    assert.ok(!isPilotStudy(promoted));
+
+    const copiedConditions = await listConditions(db, promoted.id);
+    assert.deepEqual(copiedConditions.map((c) => c.name), ["A"]);
+    const copiedDocs = await listDocumentsOfStudy(db, promoted.id);
+    assert.equal(copiedDocs.length, 1);
+    assert.equal(copiedDocs[0].reviewStatus, "draft");
+
+    // The pilot itself is untouched.
+    assert.ok(isPilotStudy(pilot));
+
+    const entries = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.objectId, promoted.id));
+    assert.equal(entries[0]?.action, "study.promoted");
+    assert.equal(entries[0]?.details?.sourceStudyId, pilot.id);
   });
 });
