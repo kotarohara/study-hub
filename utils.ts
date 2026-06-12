@@ -1,9 +1,11 @@
 import { createDefine } from "fresh";
+import type { Member } from "./lib/db/schema.ts";
 
 // Type of `ctx.state`, shared among middlewares, layouts and routes.
-// Grows as middleware lands (auth/session state arrives in Phase 0.4).
 export interface State {
   requestId: string;
+  /** Authenticated lab member, or null (set by sessionMiddleware). */
+  member: Member | null;
 }
 
 export const define = createDefine<State>();

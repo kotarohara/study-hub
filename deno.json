@@ -16,19 +16,28 @@
   },
   "lint": {
     "rules": {
-      "tags": ["fresh", "recommended"]
+      "tags": [
+        "fresh",
+        "recommended"
+      ]
     }
   },
-  "exclude": ["**/_fresh/*"],
+  "exclude": [
+    "**/_fresh/*"
+  ],
   "fmt": {
-    "exclude": ["**/*.md"]
+    "exclude": [
+      "**/*.md"
+    ]
   },
   "imports": {
     "@/": "./",
     "fresh": "jsr:@fresh/core@^2.3.3",
     "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1.1.2",
-    "preact": "npm:preact@^10.29.1",
+    "hash-wasm": "npm:hash-wasm@^4.12.0",
+    "preact": "npm:preact@^10.29.2",
     "@preact/signals": "npm:@preact/signals@^2.9.0",
+    "preact-render-to-string": "npm:preact-render-to-string@^6.7.0",
     "vite": "npm:vite@^7.1.3",
     "@types/babel__core": "npm:@types/babel__core@^7.20.5",
     "@types/node": "npm:@types/node@^24.13.2",
@@ -43,8 +52,15 @@
     "@aws-sdk/s3-request-presigner": "npm:@aws-sdk/s3-request-presigner@^3.1067.0"
   },
   "compilerOptions": {
-    "lib": ["dom", "dom.asynciterable", "dom.iterable", "deno.ns"],
-    "types": ["vite/client"],
+    "lib": [
+      "dom",
+      "dom.asynciterable",
+      "dom.iterable",
+      "deno.ns"
+    ],
+    "types": [
+      "vite/client"
+    ],
     "jsx": "precompile",
     "jsxImportSource": "preact",
     "jsxPrecompileSkipElements": [

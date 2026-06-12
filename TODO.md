@@ -79,21 +79,54 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       tokens (Telegram pairing) need server-side state — deferred to 3.4.
 
 ### 0.4 Auth & members
-- [ ] Members schema + Argon2id hashing + login/logout routes + session cookies (HttpOnly, Secure, SameSite); CSRF tokens
-- [ ] PI-invite flow (invite token → set password); no self-signup
-- [ ] Role middleware (PI > Researcher > Assistant > Collaborator) + route guards + tests
-- [ ] Rate limiting middleware on auth + public routes (in-process token bucket)
+- [x] Members schema + Argon2id hashing + login/logout routes + session cookies (HttpOnly, Secure, SameSite); CSRF tokens
+      — Argon2id via @node-rs/argon2 (OWASP params); server-side sessions table storing SHA-256 token
+      hashes (30d TTL, prune helper); `/login` + `/logout`; Secure flag in production only (dev is http).
+      CSRF: Fresh's built-in `csrf()` middleware (Origin/Sec-Fetch-Site validation) instead of
+      hand-rolled tokens — the modern equivalent. Timing-safe login (dummy-hash verify on unknown email).
+- [x] PI-invite flow (invite token → set password); no self-signup
+      — `invites` table (hashed tokens, 7d TTL, atomic single-use claim); `POST /api/invites` (PI-only,
+      returns link; emailing arrives with Phase 3.2 messaging) → `/invite/[token]` set-name/password page,
+      auto-login on accept. Seeded dev accounts (pi@studyhub.local etc.) log in with `studyhub-dev`.
+- [x] Role middleware (PI > Researcher > Assistant > Collaborator) + route guards + tests
+      — `hasRole` hierarchy + `sessionMiddleware` (global, resolves cookie → ctx.state.member) +
+      `requireMember(minRole)` guard (redirects browsers to /login, 401/403 for API clients).
+- [x] Rate limiting middleware on auth + public routes (in-process token bucket)
+      — `lib/rate_limit.ts` token bucket (+ prune); applied to login + invite-accept POSTs per client IP;
+      `rateLimit()` middleware factory ready for public `p/` routes in Phase 2.
 
 ### 0.5 Audit log
-- [ ] Append-only `audit_log` table (no UPDATE/DELETE grants) + write helper
-- [ ] Audit middleware covering: PII views/exports, consent changes, deletions, payment approvals + tests proving append-only behavior
+- [x] Append-only `audit_log` table (no UPDATE/DELETE grants) + write helper
+      — REVOKE alone cannot bind the table owner, so immutability is enforced with BEFORE
+      UPDATE/DELETE/TRUNCATE triggers that raise (migration 0002) + REVOKE from PUBLIC.
+      `audit()` helper in `lib/audit/log.ts`; actor_id has no FK so entries outlive members.
+- [x] Audit middleware covering: PII views/exports, consent changes, deletions, payment approvals + tests proving append-only behavior
+      — `createAuditMiddleware(rules)` (URLPattern-based, logs after 2xx/3xx; matcher unit-tested)
+      wired in main.ts; handler-level `audit()` calls for actions that must not go unrecorded
+      (login success/failure, invite create/accept). PII-view/export/consent/payment rules get
+      added to AUDIT_RULES as those routes land (Phases 2/4). Integration tests prove UPDATE,
+      DELETE, TRUNCATE and raw-SQL tampering are all rejected by the database.
 
 ### 0.6 OOUI shell
-- [ ] App layout: global nav listing object collections, design tokens, status-badge component
-- [ ] Reusable **collection view** (filter/sort/paginate at 50, bulk-action slots)
-- [ ] Reusable **detail view** (identity header, property panel, related-object tabs, action bar gated by lifecycle state)
-- [ ] Reusable **inline/compact chip/card** view
-- [ ] Generic CRUD + duplicate + archive action plumbing shared across object types
+- [x] App layout: global nav listing object collections, design tokens, status-badge component
+      — `components/Layout.tsx` (sidebar of object collections from `lib/ooui/nav.ts`, items enable
+      as phases land) + Tailwind 4 `@theme` tokens (brand palette + loud pilot tone) +
+      `StatusBadge` driven by `lib/ooui/status.ts` tone map. App routes auth-gated by
+      `routes/_middleware.ts` (public: login/invite/health/p/*). `/` is now the dashboard.
+- [x] Reusable **collection view** (filter/sort/paginate at 50, bulk-action slots)
+      — `CollectionView` (server-rendered; links + GET forms, no island needed) over pure helpers
+      in `lib/ooui/collection.ts` (in-memory filter/sort/paginate — push to SQL when a collection
+      outgrows lab scale). Exercised by `/members`.
+- [x] Reusable **detail view** (identity header, property panel, related-object tabs, action bar gated by lifecycle state)
+      — `DetailView` + `ActionBar`; exercised by `/members/[id]` (Overview/Activity tabs — Activity
+      lists the member's audit entries; PI-or-self "revoke sessions" action, audited).
+- [x] Reusable **inline/compact chip/card** view — `Chip` (drag-and-drop arrives with the islands
+      that need it).
+- [x] Generic CRUD + duplicate + archive action plumbing shared across object types
+      — `lib/ooui/actions.ts`: ObjectAction + resolveActions() gating by lifecycle state and role
+      (disabled actions render with a reason). Components are Fresh-free Preact, render-tested
+      locally with preact-render-to-string. Concrete duplicate/archive semantics land with the
+      first lifecycle objects (1.1/1.2). Invite UI at `/members/invite` (PI-only).
 
 ## Phase 1 — Studies & Documents
 
