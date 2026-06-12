@@ -49,6 +49,9 @@ const TONES: Record<string, StatusTone> = {
   // Instruments (spec §4 kept-feature 4)
   simple_form: "info",
   external: "neutral",
+  // Screeners (spec §3.4)
+  open: "success",
+  paused: "warning",
   // Participants (spec §3.4) — do-not-contact is deliberately loud
   do_not_contact: "danger",
   preferred: "info",

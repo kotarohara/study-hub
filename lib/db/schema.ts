@@ -341,9 +341,9 @@ export const participants = pgTable("participants", {
   /** Where this person was recruited from (flyer, class, friend, …). */
   source: text("source").notNull().default(""),
   doNotContact: boolean("do_not_contact").notNull().default(false),
-  createdBy: uuid("created_by")
-    .notNull()
-    .references(() => members.id),
+  /** Member who added the record; null when self-registered via a
+   * public screener (no member actor). */
+  createdBy: uuid("created_by").references(() => members.id),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -448,6 +448,109 @@ export const instrumentVersions = pgTable("instrument_versions", {
 ]);
 
 export type InstrumentVersion = typeof instrumentVersions.$inferSelect;
+
+// Screeners (spec §3.4): a study's public recruitment form — a pinned
+// version of a simple-form instrument plus eligibility rules. The page
+// lives at p/[token]/screener; the token is an opaque capability stored
+// here (pause or regenerate to revoke). Internal Pilot studies never get
+// one (spec §3.3: no public recruitment).
+export const screenerStatus = pgEnum("screener_status", ["open", "paused"]);
+
+export const screeners = pgTable("screeners", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studyId: uuid("study_id")
+    .notNull()
+    .unique()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  instrumentId: uuid("instrument_id")
+    .notNull()
+    .references(() => instruments.id),
+  /** Pinned at configure time; revising the instrument never silently
+   * changes a live screener. */
+  instrumentVersionNumber: integer("instrument_version_number").notNull(),
+  /** Eligibility rules (validated by lib/objects/eligibility.ts). */
+  eligibility: jsonb("eligibility").$type<unknown[]>().notNull(),
+  status: screenerStatus("status").notNull().default("open"),
+  token: text("token").notNull().unique(),
+  /** Public page views, for funnel stats (viewed → screened → …). */
+  views: integer("views").notNull().default(0),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Screener = typeof screeners.$inferSelect;
+
+// Enrollments (spec §2.1): a participant's involvement in one study.
+// Created here by screeners (2.4); the full lifecycle with transitions,
+// manual enrollment and the pilot flag lands in 2.5.
+export const enrollmentStatus = pgEnum("enrollment_status", [
+  "screened",
+  "eligible",
+  "consented",
+  "active",
+  "completed",
+  "withdrawn",
+  "excluded",
+]);
+
+export const enrollments = pgTable("enrollments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studyId: uuid("study_id")
+    .notNull()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  participantId: uuid("participant_id")
+    .notNull()
+    .references(() => participants.id, { onDelete: "cascade" }),
+  status: enrollmentStatus("status").notNull().default("screened"),
+  /** Pilot data quarantine (spec §4 kept-feature 5): excluded from
+   * datasets, quotas and publishable exports by default. */
+  isPilot: boolean("is_pilot").notNull().default(false),
+  conditionId: uuid("condition_id").references(() => conditions.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("enrollments_study_participant_unique").on(
+    table.studyId,
+    table.participantId,
+  ),
+]);
+
+export type Enrollment = typeof enrollments.$inferSelect;
+
+// Screener answers are jsonb, NOT encrypted: screener questions must not
+// ask for PII (contact details go through Participant/ContactChannel on
+// the same submission). Responses pin the instrument version they were
+// collected with.
+export const screenerResponses = pgTable("screener_responses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  screenerId: uuid("screener_id")
+    .notNull()
+    .references(() => screeners.id, { onDelete: "cascade" }),
+  enrollmentId: uuid("enrollment_id")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  instrumentVersionNumber: integer("instrument_version_number").notNull(),
+  answers: jsonb("answers").$type<Record<string, unknown>>().notNull(),
+  eligible: boolean("eligible").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type ScreenerResponse = typeof screenerResponses.$inferSelect;
 
 // Milestones / Tasks (spec §2.1, §3.7): timeline items with owners, due
 // dates and dependencies; belong to a Study or to the Project itself.

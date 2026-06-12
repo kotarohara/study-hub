@@ -92,6 +92,13 @@
       "when": 1781291871641,
       "tag": "0012_free_devos",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1781292399126,
+      "tag": "0013_safe_electro",
+      "breakpoints": true
     }
   ]
 }

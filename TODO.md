@@ -242,7 +242,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       previews now and participant forms in 2.4. Versioned like documents: revisions
       require a change note, old versions frozen. Study attachment (Usage tab) lands
       with screeners in 2.4.
-- [ ] 2.4 Public screener pages at `p/[token]`: Turnstile (stubbed in dev) + rate limits; eligibility rules → Enrollment status
+- [x] 2.4 Public screener pages at `p/[token]`: Turnstile (stubbed in dev) + rate limits; eligibility rules → Enrollment status
+      One screener per study (configured at `/studies/[id]/screener`, researcher+; pause/resume
+      assistant+): pins an instrument version, eligibility rules (`lib/objects/eligibility.ts`,
+      ANDed min/max + anyOf) validated against it. Public page `p/[token]/screener` (opaque
+      128-bit token; live only while status=open AND study recruiting AND not pilot — spec §3.3
+      no-public-recruitment enforced in domain + page). Turnstile adapter stubs locally, fails
+      closed in unconfigured production; in-process rate limit on POST. Submissions create a
+      memberless pool Participant (encrypted PII, source "screener") + Enrollment
+      (eligible/screened by rules) + response row atomically; eligibility never revealed to the
+      participant; `views` counter feeds funnel stats (2.7).
 - [ ] 2.5 Enrollment lifecycle (screened → eligible → consented → active → completed/withdrawn/excluded) + pilot-enrollment flag
 - [ ] 2.6 Consent flow: page rendered from approved Document version, e-signature (encrypted), consent-to-recontact flag, re-consent on amendment
 - [ ] 2.7 Recruitment funnel stats per channel + quota dashboard (per-stratum counts vs targets; manual pause)

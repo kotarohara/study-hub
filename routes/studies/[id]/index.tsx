@@ -108,6 +108,14 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         minRole: "researcher",
         enabledIn: EDITABLE_STATES,
       },
+      ...(!isPilotStudy(study)
+        ? [{
+          id: "screener",
+          label: "Screener",
+          href: `/studies/${study.id}/screener`,
+          method: "get" as const,
+        }]
+        : []),
       {
         id: "pathway",
         label: "Change pathway",

@@ -185,6 +185,17 @@ export async function listStudiesFor(
   return rows.map((study) => ({ study, project: byId.get(study.projectId)! }));
 }
 
+/** Unscoped lookup for system/public flows (no member context). */
+export async function getStudy(
+  db: Db,
+  studyId: string,
+): Promise<Study | null> {
+  const study = await db.query.studies.findFirst({
+    where: eq(studies.id, studyId),
+  });
+  return study ?? null;
+}
+
 /** Study + project if visible to `member`; null otherwise. */
 export async function getStudyFor(
   db: Db,

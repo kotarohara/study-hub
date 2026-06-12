@@ -37,6 +37,11 @@ const ConfigSchema = z.object({
    * without re-indexing contact_channels.value_index. */
   PII_INDEX_SECRET: z.string().min(32),
   // Schema-level defaults: optional knobs, defaulted in every environment.
+  /** Cloudflare Turnstile for public participant pages. Empty outside
+   * production = local stub (no network); empty IN production fails
+   * closed — public forms reject every submission until configured. */
+  TURNSTILE_SITE_KEY: z.string().default(""),
+  TURNSTILE_SECRET_KEY: z.string().default(""),
   BACKUP_CRON_ENABLED: z.stringbool().default(false),
   BACKUP_CRON: z.string().default("0 18 * * *"), // 02:00 SGT
 });

@@ -110,7 +110,8 @@ export async function createParticipant(
   db: Db,
   opts: ParticipantInput & {
     channels?: ChannelInput[];
-    createdBy: Member;
+    /** Null for self-registration via a public screener (no member). */
+    createdBy: Member | null;
   } & AuditCtx,
 ): Promise<Participant> {
   validateInput(opts);
@@ -126,7 +127,7 @@ export async function createParticipant(
         yearOfBirth: opts.yearOfBirth ?? null,
         gender: opts.gender?.trim() ?? "",
         source: opts.source?.trim() ?? "",
-        createdBy: opts.createdBy.id,
+        createdBy: opts.createdBy?.id ?? null,
       })
       .returning();
     if (channels.length > 0) {
@@ -141,7 +142,7 @@ export async function createParticipant(
     }
     await audit(tx, {
       action: "participant.created",
-      actorId: opts.createdBy.id,
+      actorId: opts.createdBy?.id ?? null,
       objectType: "participant",
       objectId: participant.id,
       // Pseudonymous code only — audit details must never contain PII.
