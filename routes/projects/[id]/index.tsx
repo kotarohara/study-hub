@@ -9,6 +9,11 @@ import type {
 } from "../../../lib/db/schema.ts";
 import { listDocumentsOfProject } from "../../../lib/objects/documents.ts";
 import {
+  listMilestonesOfProject,
+  type MilestoneWithMeta,
+} from "../../../lib/objects/milestones.ts";
+import { MilestoneList } from "../../../components/ooui/MilestoneList.tsx";
+import {
   getProjectFor,
   listAddableMembers,
   listProjectMembers,
@@ -27,6 +32,7 @@ interface Data {
   addable: Member[];
   studies: Study[];
   documents: Document[];
+  milestones: MilestoneWithMeta[];
 }
 
 const TABS = [
@@ -34,6 +40,7 @@ const TABS = [
   { id: "members", label: "Members" },
   { id: "studies", label: "Studies" },
   { id: "documents", label: "Documents" },
+  { id: "timeline", label: "Timeline" },
 ];
 
 export const handler = define.handlers({
@@ -47,10 +54,11 @@ export const handler = define.handlers({
       : "overview";
 
     const onMembersTab = activeTab === "members";
+    const onTimelineTab = activeTab === "timeline";
     return page<Data>({
       project,
       activeTab,
-      projectMembers: onMembersTab
+      projectMembers: onMembersTab || onTimelineTab
         ? await listProjectMembers(db, project.id)
         : [],
       addable: onMembersTab ? await listAddableMembers(db, project.id) : [],
@@ -59,6 +67,9 @@ export const handler = define.handlers({
         : [],
       documents: activeTab === "documents"
         ? await listDocumentsOfProject(db, project.id)
+        : [],
+      milestones: onTimelineTab
+        ? await listMilestonesOfProject(db, project.id)
         : [],
     });
   },
@@ -246,6 +257,18 @@ export default define.page<typeof handler>(({ data, state, url }) => {
               </a>
             )}
           </div>
+        )}
+        {data.activeTab === "timeline" && (
+          <MilestoneList
+            items={data.milestones}
+            byId={new Map(
+              data.milestones.map((m) => [m.milestone.id, m.milestone.title]),
+            )}
+            canManage={canManage && project.status === "active"}
+            owners={data.projectMembers}
+            addAction={`/projects/${project.id}/milestones/add`}
+            emptyMessage="No milestones yet — project-level ones can be added here; study milestones roll up automatically."
+          />
         )}
       </DetailView>
     </Layout>

@@ -13,6 +13,7 @@ import {
 import { resolveActions } from "../../lib/ooui/actions.ts";
 import { Stepper } from "./Stepper.tsx";
 import { PilotBanner } from "./PilotBanner.tsx";
+import { MilestoneList } from "./MilestoneList.tsx";
 
 Deno.test("PilotBanner: loud, explicit, and machine-identifiable", () => {
   const html = render(<PilotBanner />);
@@ -149,4 +150,53 @@ Deno.test("DetailView: identity header, properties, tabs, action bar", () => {
   assert.ok(html.includes('href="/studies/s1?tab=overview"'));
   assert.ok(html.includes("tab content"));
   assert.ok(html.includes('action="/a"'));
+});
+
+Deno.test("MilestoneList: blocked badge, dep names, controls per role", () => {
+  const base = {
+    id: "m1",
+    projectId: "p",
+    studyId: "s",
+    title: "Start recruiting",
+    notes: "",
+    ownerId: null,
+    startsOn: null,
+    dueOn: new Date("2026-08-01T00:00:00Z"),
+    status: "pending" as const,
+    createdBy: "x",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const html = render(
+    <MilestoneList
+      items={[{
+        milestone: base,
+        owner: null,
+        dependsOn: ["m0"],
+        blocked: true,
+      }]}
+      byId={new Map([["m0", "IRB approval"], ["m1", "Start recruiting"]])}
+      canManage={true}
+      owners={[]}
+      addAction="/studies/s/milestones/add"
+    />,
+  );
+  assert.ok(html.includes("Start recruiting"));
+  assert.ok(html.includes('data-milestone-blocked="true"'));
+  assert.ok(html.includes("IRB approval")); // dependency rendered by name
+  assert.ok(html.includes("due 2026-08-01"));
+  assert.ok(html.includes("/milestones/m1/status?to=in_progress"));
+  assert.ok(html.includes("Add milestone"));
+
+  const readOnly = render(
+    <MilestoneList
+      items={[{ milestone: base, owner: null, dependsOn: [], blocked: false }]}
+      byId={new Map()}
+      canManage={false}
+      owners={[]}
+      addAction="/x"
+    />,
+  );
+  assert.ok(!readOnly.includes("Add milestone"));
+  assert.ok(!readOnly.includes("delete"));
 });

@@ -9,6 +9,8 @@ import {
   documents,
   documentVersions,
   type Member,
+  milestoneDependencies,
+  milestones,
   type Project,
   projects,
   studies,
@@ -441,6 +443,48 @@ async function copyStudyTx(
         position: c.position,
       })),
     );
+  }
+  // Copy milestones (the study's timeline): statuses reset to pending,
+  // dependencies remapped onto the copies.
+  const sourceMilestones = await tx
+    .select()
+    .from(milestones)
+    .where(eq(milestones.studyId, source.id));
+  const milestoneIdMap = new Map<string, string>();
+  for (const m of sourceMilestones) {
+    const [mCopy] = await tx
+      .insert(milestones)
+      .values({
+        projectId: source.projectId,
+        studyId: copy.id,
+        title: m.title,
+        notes: m.notes,
+        ownerId: m.ownerId,
+        startsOn: m.startsOn,
+        dueOn: m.dueOn,
+        createdBy: actor.id,
+      })
+      .returning();
+    milestoneIdMap.set(m.id, mCopy.id);
+  }
+  if (sourceMilestones.length > 0) {
+    const sourceDeps = await tx
+      .select()
+      .from(milestoneDependencies)
+      .where(
+        inArray(
+          milestoneDependencies.milestoneId,
+          sourceMilestones.map((m) => m.id),
+        ),
+      );
+    const remapped = sourceDeps.flatMap((d) => {
+      const from = milestoneIdMap.get(d.milestoneId);
+      const to = milestoneIdMap.get(d.dependsOnId);
+      return from && to ? [{ milestoneId: from, dependsOnId: to }] : [];
+    });
+    if (remapped.length > 0) {
+      await tx.insert(milestoneDependencies).values(remapped);
+    }
   }
   // Copy study-attached documents: latest version becomes v1 of a fresh
   // DRAFT document — approval status never carries over to a new study.
