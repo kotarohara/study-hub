@@ -4,9 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository State
 
-This repository is **pre-implementation**. It contains `study-hub-spec.md` (Draft v0.5) — the full specification for StudyHub, a user study management system for a single HCI research lab — and `TODO.md`, the task-level implementation plan. There is no application code, build system, or test suite yet. **`study-hub-spec.md` is the source of truth**; read it before implementing anything, and keep implementations consistent with its Decision Log (§9) and phase plan (§8). **Track progress in `TODO.md`** — work it top-to-bottom, check off completed tasks, and note divergences inline.
+Implementation is in **Phase 0** (foundations). `study-hub-spec.md` (Draft v0.5) — the full specification for StudyHub, a user study management system for a single HCI research lab — **is the source of truth**; read it before implementing anything, and keep implementations consistent with its Decision Log (§9) and phase plan (§8). **Track progress in `TODO.md`** — work it top-to-bottom, check off completed tasks, and note divergences inline.
 
 **Local-first development:** everything must run and be testable locally (Docker Compose with Postgres, MinIO for S3, Mailpit for email; fake adapters for Telegram/Discord/Notion; no test may need network or real credentials). AWS deployment is deferred to the final phase — see TODO.md's ground rules.
+
+## Commands
+
+- `deno task stack:up` / `stack:down` — local services via `compose.dev.yml` (Postgres :5432, MinIO :9000/:9001, Mailpit SMTP :1025 + UI :8025). Integration tests need this stack running.
+- `deno task dev` — dev server (Vite + HMR). No `.env` needed: in development, config falls back to the compose stack defaults (see `lib/config.ts` / `.env.example`).
+- `deno task test` — all tests; `deno test lib/config_test.ts` for a single file.
+- `deno task check` — fmt + lint + type-check (run `deno fmt` before committing).
+- `deno task build` / `start` — production build / serve.
+- `deno install` once after checkout (`nodeModulesDir` is `"manual"`).
+
+Config: env vars validated by Zod in `lib/config.ts`; the environment switch is `APP_ENV` (development/test/production). Production has no fallbacks and fails fast on missing vars.
 
 ## What StudyHub Is
 

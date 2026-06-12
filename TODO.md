@@ -22,7 +22,7 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
   - Email → `ChannelAdapter` impl for SES (prod) / SMTP-to-Mailpit (dev)
   - Telegram / Discord / Notion → adapters with fake/logging impls; webhooks tested by
     POSTing simulated payloads
-  - Turnstile → verification stub when `ENV=development`
+  - Turnstile → verification stub when `APP_ENV=development`
 - **No test may require network access or real credentials.**
 - `.env.example` documents every variable; dev defaults work out of the box.
 
@@ -31,11 +31,21 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 ## Phase 0 — Foundations (all local)
 
 ### 0.1 Scaffold
-- [ ] Initialize Fresh 2 project; `deno.json` tasks: `dev`, `test`, `check` (fmt+lint+types), `db:migrate`, `db:seed`
-- [ ] `compose.dev.yml`: Postgres 16 + MinIO + Mailpit, with healthchecks and volumes
-- [ ] `.env.example` + config loader (Zod-validated, fails fast on missing vars)
-- [ ] `/health` route (checks DB + storage connectivity)
-- [ ] GitHub Actions CI: `deno task check` + `deno test` against service containers
+- [x] Initialize Fresh 2 project; `deno.json` tasks: `dev`, `test`, `check` (fmt+lint+types), `db:migrate`, `db:seed`
+      — Fresh 2.3.3 with the Vite setup (current default). `db:migrate`/`db:seed` deferred to 0.2
+      when the scripts exist; added `stack:up`/`stack:down` tasks for the compose stack.
+- [x] `compose.dev.yml`: Postgres 16 + MinIO + Mailpit, with healthchecks and volumes
+      — plus a one-shot `minio-init` job that creates the dev buckets and enables versioning
+      on `studyhub-backups` (mirrors prod S3).
+- [x] `.env.example` + config loader (Zod-validated, fails fast on missing vars)
+      — `lib/config.ts`; env var is `APP_ENV` (not `ENV`, which is reserved by POSIX sh).
+      Dev/test fall back to compose.dev.yml defaults so a fresh checkout needs no .env;
+      production requires every var explicitly.
+- [x] `/health` route (checks DB + storage connectivity) — `routes/health.ts` + `lib/health.ts`
+- [x] GitHub Actions CI: `deno task check` + `deno test` against service containers
+      — uses `docker compose -f compose.dev.yml up --wait` (same stack as dev) rather than GHA
+      service containers; also runs `deno task build` (vite). CI is the verification path for
+      anything needing JSR or container pulls when the dev sandbox blocks those hosts.
 
 ### 0.2 Data layer + backups
 - [ ] Drizzle ORM setup: connection pool, migration runner, first migration (members table as guinea pig)
