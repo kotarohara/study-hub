@@ -9,6 +9,10 @@ import {
   getParticipant,
   listChannels,
 } from "../../../lib/objects/participants.ts";
+import {
+  listEnrollmentsOfParticipant,
+  type ParticipationRow,
+} from "../../../lib/objects/enrollments.ts";
 import { audit } from "../../../lib/audit/log.ts";
 import { clientHost } from "../../../lib/auth/limiters.ts";
 import { hasRole } from "../../../lib/auth/roles.ts";
@@ -22,6 +26,7 @@ interface Data {
   channels: ContactChannel[];
   /** Other pool entries sharing a contact value (never hard-blocked). */
   duplicates: DuplicateWarning[];
+  history: ParticipationRow[];
   activeTab: string;
 }
 
@@ -61,6 +66,9 @@ export const handler = define.handlers({
         channels.map((c) => ({ kind: c.kind, value: c.value })),
         participant.id,
       ),
+      history: activeTab === "history"
+        ? await listEnrollmentsOfParticipant(db, participant.id)
+        : [],
       activeTab,
     });
   },
@@ -255,10 +263,55 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         )}
 
         {data.activeTab === "history" && (
-          <p class="text-sm text-gray-500">
-            Enrollment and session history appears here once enrollments land
-            (Phase 2.5).
-          </p>
+          data.history.length === 0
+            ? (
+              <p class="text-sm text-gray-500">
+                No study participation yet.
+              </p>
+            )
+            : (
+              <table class="w-full max-w-2xl text-sm">
+                <thead>
+                  <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <th class="py-2 pr-4">Study</th>
+                    <th class="py-2 pr-4">Status</th>
+                    <th class="py-2 pr-4">Enrolled</th>
+                    <th class="py-2">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.history.map((row) => (
+                    <tr
+                      key={row.enrollment.id}
+                      class="border-b border-gray-100"
+                    >
+                      <td class="py-2 pr-4">
+                        <a
+                          href={`/studies/${row.studyId}?tab=participants`}
+                          class="font-medium text-brand-700 hover:underline"
+                        >
+                          {row.studyName}
+                        </a>
+                        {row.enrollment.isPilot && (
+                          <span class="ml-2">
+                            <StatusBadge status="pilot" />
+                          </span>
+                        )}
+                      </td>
+                      <td class="py-2 pr-4">
+                        <StatusBadge status={row.enrollment.status} />
+                      </td>
+                      <td class="py-2 pr-4">
+                        {row.enrollment.createdAt.toISOString().slice(0, 10)}
+                      </td>
+                      <td class="py-2">
+                        {row.enrollment.updatedAt.toISOString().slice(0, 10)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
         )}
       </DetailView>
     </Layout>

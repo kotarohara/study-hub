@@ -9,6 +9,8 @@ import {
   versionForm,
 } from "../../../lib/objects/instruments.ts";
 import type { FormItem, ScoringRule } from "../../../lib/objects/forms.ts";
+import { listScreenersOfInstrument } from "../../../lib/objects/screeners.ts";
+import { Chip } from "../../../components/ooui/Chip.tsx";
 import { Layout } from "../../../components/Layout.tsx";
 import { DetailView } from "../../../components/ooui/DetailView.tsx";
 import { FormRender } from "../../../components/FormRender.tsx";
@@ -20,6 +22,7 @@ interface Data {
   shown: InstrumentVersion;
   form: { items: FormItem[]; scoring: ScoringRule[] } | null;
   versions: InstrumentVersion[];
+  usage: { studyId: string; studyName: string; pinned: number }[];
   activeTab: string;
 }
 
@@ -52,6 +55,13 @@ export const handler = define.handlers({
       shown,
       form: instrument.kind === "simple_form" ? versionForm(shown) : null,
       versions: await listVersions(db, instrument.id),
+      usage: activeTab === "usage"
+        ? (await listScreenersOfInstrument(db, instrument.id)).map((u) => ({
+          studyId: u.studyId,
+          studyName: u.studyName,
+          pinned: u.screener.instrumentVersionNumber,
+        }))
+        : [],
       activeTab,
     });
   },
@@ -194,10 +204,25 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         )}
 
         {data.activeTab === "usage" && (
-          <p class="text-sm text-gray-500">
-            Studies using this instrument appear here once screeners land (Phase
-            2.4).
-          </p>
+          data.usage.length === 0
+            ? (
+              <p class="text-sm text-gray-500">
+                Not used by any study screener yet.
+              </p>
+            )
+            : (
+              <div class="flex flex-wrap gap-2">
+                {data.usage.map((u) => (
+                  <Chip
+                    key={u.studyId}
+                    href={`/studies/${u.studyId}/screener`}
+                    icon="⚗"
+                    label={u.studyName}
+                    sublabel={`screener · pinned v${u.pinned}`}
+                  />
+                ))}
+              </div>
+            )
         )}
       </DetailView>
     </Layout>

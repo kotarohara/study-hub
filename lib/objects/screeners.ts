@@ -12,6 +12,7 @@ import {
   type Screener,
   screenerResponses,
   screeners,
+  studies,
   type Study,
 } from "../db/schema.ts";
 import { audit } from "../audit/log.ts";
@@ -193,6 +194,22 @@ export async function getScreenerByToken(
     where: eq(screeners.token, token),
   });
   return screener ?? null;
+}
+
+/** Studies whose screener uses an instrument (instrument Usage tab). */
+export async function listScreenersOfInstrument(
+  db: Db,
+  instrumentId: string,
+): Promise<{ screener: Screener; studyId: string; studyName: string }[]> {
+  return await db
+    .select({
+      screener: screeners,
+      studyId: studies.id,
+      studyName: studies.name,
+    })
+    .from(screeners)
+    .innerJoin(studies, eq(screeners.studyId, studies.id))
+    .where(eq(screeners.instrumentId, instrumentId));
 }
 
 /** A screener accepts the public only while its study is recruiting. */

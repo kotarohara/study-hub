@@ -252,7 +252,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       memberless pool Participant (encrypted PII, source "screener") + Enrollment
       (eligible/screened by rules) + response row atomically; eligibility never revealed to the
       participant; `views` counter feeds funnel stats (2.7).
-- [ ] 2.5 Enrollment lifecycle (screened → eligible → consented → active → completed/withdrawn/excluded) + pilot-enrollment flag
+- [x] 2.5 Enrollment lifecycle (screened → eligible → consented → active → completed/withdrawn/excluded) + pilot-enrollment flag
+      Explicit transition map in `lib/objects/enrollments.ts`; withdrawn/excluded/completed are
+      terminal; every transition audited in-transaction with the pseudonymous code. Manual
+      enrollment from the pool on the study "Participants" tab (assistant+; DNC participants
+      blocked; one enrollment per participant per study). Pilot flag: forced for Internal Pilot
+      studies, optional dry-run flag otherwise (researcher+ toggle, frozen once terminal).
+      Assignment engine (1.4) wired: assign-condition action on consented/active enrollments,
+      random-balanced or manual sequence per design, pilot enrollments balanced separately,
+      one audit event per assignment. Participant "History" tab + instrument "Usage" tab filled
+      in. "Record consent" stays a manual transition until the consent flow (2.6).
 - [ ] 2.6 Consent flow: page rendered from approved Document version, e-signature (encrypted), consent-to-recontact flag, re-consent on amendment
 - [ ] 2.7 Recruitment funnel stats per channel + quota dashboard (per-stratum counts vs targets; manual pause)
 - [ ] 2.8 Re-recruitment: pool filtering + bulk invites via preferred ContactChannel
