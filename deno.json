@@ -25,6 +25,7 @@
   },
   "imports": {
     "@/": "./",
+    "@node-rs/argon2": "npm:@node-rs/argon2@^2.0.2",
     "fresh": "jsr:@fresh/core@^2.3.3",
     "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1.1.2",
     "preact": "npm:preact@^10.29.1",

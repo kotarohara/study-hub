@@ -79,10 +79,21 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       tokens (Telegram pairing) need server-side state — deferred to 3.4.
 
 ### 0.4 Auth & members
-- [ ] Members schema + Argon2id hashing + login/logout routes + session cookies (HttpOnly, Secure, SameSite); CSRF tokens
-- [ ] PI-invite flow (invite token → set password); no self-signup
-- [ ] Role middleware (PI > Researcher > Assistant > Collaborator) + route guards + tests
-- [ ] Rate limiting middleware on auth + public routes (in-process token bucket)
+- [x] Members schema + Argon2id hashing + login/logout routes + session cookies (HttpOnly, Secure, SameSite); CSRF tokens
+      — Argon2id via @node-rs/argon2 (OWASP params); server-side sessions table storing SHA-256 token
+      hashes (30d TTL, prune helper); `/login` + `/logout`; Secure flag in production only (dev is http).
+      CSRF: Fresh's built-in `csrf()` middleware (Origin/Sec-Fetch-Site validation) instead of
+      hand-rolled tokens — the modern equivalent. Timing-safe login (dummy-hash verify on unknown email).
+- [x] PI-invite flow (invite token → set password); no self-signup
+      — `invites` table (hashed tokens, 7d TTL, atomic single-use claim); `POST /api/invites` (PI-only,
+      returns link; emailing arrives with Phase 3.2 messaging) → `/invite/[token]` set-name/password page,
+      auto-login on accept. Seeded dev accounts (pi@studyhub.local etc.) log in with `studyhub-dev`.
+- [x] Role middleware (PI > Researcher > Assistant > Collaborator) + route guards + tests
+      — `hasRole` hierarchy + `sessionMiddleware` (global, resolves cookie → ctx.state.member) +
+      `requireMember(minRole)` guard (redirects browsers to /login, 401/403 for API clients).
+- [x] Rate limiting middleware on auth + public routes (in-process token bucket)
+      — `lib/rate_limit.ts` token bucket (+ prune); applied to login + invite-accept POSTs per client IP;
+      `rateLimit()` middleware factory ready for public `p/` routes in Phase 2.
 
 ### 0.5 Audit log
 - [ ] Append-only `audit_log` table (no UPDATE/DELETE grants) + write helper
