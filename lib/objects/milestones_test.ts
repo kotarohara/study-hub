@@ -73,7 +73,10 @@ async function withEnv(
   try {
     await fn({ researcher, project, study });
   } finally {
-    await db.delete(projects).where(eq(projects.id, project.id));
+    // Some tests create extra projects (the cross-project dependency case);
+    // delete everything the test member created so milestone created_by
+    // FKs don't block deleting the member itself.
+    await db.delete(projects).where(eq(projects.createdBy, researcher.id));
     await db.delete(members).where(inArray(members.id, [researcher.id]));
     await closeTestDb();
   }
