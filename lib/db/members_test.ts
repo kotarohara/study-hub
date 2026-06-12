@@ -24,13 +24,31 @@ Deno.test("members: insert and select roundtrip", async (t) => {
   await t.step("cleanup", closeTestDb);
 });
 
+/** Messages of `err` and every error in its cause chain (drizzle wraps the
+ * postgres error, so the constraint detail lives on `cause`). */
+function errorChainText(err: unknown): string {
+  const parts: string[] = [];
+  let cur: unknown = err;
+  while (cur instanceof Error) {
+    parts.push(cur.message);
+    cur = cur.cause;
+  }
+  return parts.join(" | ");
+}
+
 Deno.test("members: email uniqueness is enforced", async (t) => {
   await withRollback(async (tx) => {
     const input = fakeMember();
     await tx.insert(members).values(input);
     await assert.rejects(
       () => tx.insert(members).values(fakeMember({ email: input.email })),
-      /duplicate key|members_email_unique/,
+      (err: unknown) => {
+        assert.match(
+          errorChainText(err),
+          /duplicate key|members_email_unique/,
+        );
+        return true;
+      },
     );
   });
   await t.step("cleanup", closeTestDb);
