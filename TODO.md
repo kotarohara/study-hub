@@ -66,9 +66,17 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       start task; dev-only manual trigger `POST /api/dev/backup`. Discord failure alerts deferred to 3.3.
 
 ### 0.3 Crypto & tokens
-- [ ] AES-256-GCM field encryption helpers (encrypt/decrypt, key from env, versioned key id for future rotation) + tests incl. tamper detection
-- [ ] Drizzle custom column type for encrypted PII fields
-- [ ] HMAC magic-link tokens: sign/verify with expiry + purpose scoping + tests
+- [x] AES-256-GCM field encryption helpers (encrypt/decrypt, key from env, versioned key id for future rotation) + tests incl. tamper detection
+      — `lib/crypto/encryption.ts`; node:crypto (sync, required by Drizzle custom types); keyring env
+      `PII_ENCRYPTION_KEYS` = `<version>:<base64 32B key>` pairs, highest version encrypts; stored
+      format `enc:v<n>:<iv>:<ct>:<tag>`. Tests cover tamper (all parts), rotation, wrong-key, malformed.
+- [x] Drizzle custom column type for encrypted PII fields
+      — `encryptedText` in `lib/db/encrypted.ts` (kept out of schema.ts so drizzle-kit loads cleanly);
+      integration test proves plaintext through Drizzle, ciphertext at rest.
+- [x] HMAC magic-link tokens: sign/verify with expiry + purpose scoping + tests
+      — `lib/crypto/magic_link.ts`; HMAC-SHA256, base64url `payload.sig`, timing-safe compare,
+      signature checked before payload parse; `MAGIC_LINK_SECRET` env (min 32 chars). One-time-use
+      tokens (Telegram pairing) need server-side state — deferred to 3.4.
 
 ### 0.4 Auth & members
 - [ ] Members schema + Argon2id hashing + login/logout routes + session cookies (HttpOnly, Secure, SameSite); CSRF tokens

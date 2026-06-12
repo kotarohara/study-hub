@@ -26,6 +26,13 @@ const ConfigSchema = z.object({
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535),
   MAIL_FROM: z.string().min(1),
+  // Comma-separated `<version>:<base64 32-byte key>` pairs; highest version
+  // encrypts, all versions decrypt (see lib/crypto/encryption.ts).
+  PII_ENCRYPTION_KEYS: z.string().regex(
+    /^\d+:[A-Za-z0-9+/]+=*(,\d+:[A-Za-z0-9+/]+=*)*$/,
+    "expected comma-separated <version>:<base64key> pairs",
+  ),
+  MAGIC_LINK_SECRET: z.string().min(32),
   // Schema-level defaults: optional knobs, defaulted in every environment.
   BACKUP_CRON_ENABLED: z.stringbool().default(false),
   BACKUP_CRON: z.string().default("0 18 * * *"), // 02:00 SGT
@@ -46,6 +53,8 @@ const DEV_DEFAULTS: Record<string, string> = {
   SMTP_HOST: "localhost",
   SMTP_PORT: "1025",
   MAIL_FROM: "StudyHub <studyhub@localhost>",
+  PII_ENCRYPTION_KEYS: "1:c3R1ZHlodWItZGV2LW9ubHktYWVzLWtleS0zMi1ieSE=",
+  MAGIC_LINK_SECRET: "studyhub-dev-only-magic-link-secret-do-not-deploy",
 };
 
 export class ConfigError extends Error {}

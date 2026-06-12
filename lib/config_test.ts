@@ -42,6 +42,8 @@ Deno.test("production: missing variables fail fast and name every one", () => {
       "S3_SECRET_ACCESS_KEY",
       "SMTP_HOST",
       "MAIL_FROM",
+      "PII_ENCRYPTION_KEYS",
+      "MAGIC_LINK_SECRET",
     ]
   ) {
     assert.ok(
@@ -65,9 +67,19 @@ Deno.test("production: explicit configuration is accepted", () => {
     SMTP_HOST: "email-smtp.ap-southeast-1.amazonaws.com",
     SMTP_PORT: "587",
     MAIL_FROM: "StudyHub <noreply@studyhub.example.org>",
+    PII_ENCRYPTION_KEYS: "1:c3R1ZHlodWItZGV2LW9ubHktYWVzLWtleS0zMi1ieSE=",
+    MAGIC_LINK_SECRET: "a-production-secret-of-sufficient-length!!",
   });
   assert.equal(config.APP_ENV, "production");
   assert.equal(config.S3_REGION, "ap-southeast-1");
+});
+
+Deno.test("malformed PII_ENCRYPTION_KEYS is rejected", () => {
+  assert.throws(
+    () => loadConfig({ PII_ENCRYPTION_KEYS: "not-a-keyring" }),
+    ConfigError,
+  );
+  assert.throws(() => loadConfig({ MAGIC_LINK_SECRET: "short" }), ConfigError);
 });
 
 Deno.test("invalid URL is rejected with a ConfigError", () => {
