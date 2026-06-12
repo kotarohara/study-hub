@@ -37,7 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Instruments",
     href: "/instruments",
     icon: "☰",
-    enabled: false, // Phase 2.2
+    enabled: true,
   },
   {
     id: "documents",

@@ -233,7 +233,15 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       over normalized `kind:value` in `lib/crypto/blind_index.ts` — warns on create
       (confirm-anyway, never hard-blocks) + passive banner on the detail page.
       ⚠ The "import" half re-applies when the CSV importer lands (Phase 4).
-- [ ] 2.3 Simple-form builder Instrument (item types, no branching) + versioning + scoring rules; external-instrument records (Qualtrics links)
+- [x] 2.3 Simple-form builder Instrument (item types, no branching) + versioning + scoring rules; external-instrument records (Qualtrics links)
+      Lab-wide library at `/instruments` (authoring researcher+). Form model in
+      `lib/objects/forms.ts` (Zod): short/long text, number, single/multi choice, likert;
+      scoring rules (sum/mean, likert reverse-scoring); `validateResponse`/`scoreResponse`
+      ready for screeners (2.4) and EDA (Phase 4). Builder is the `FormBuilder` island
+      serializing JSON into hidden inputs (server re-validates); `FormRender` renders
+      previews now and participant forms in 2.4. Versioned like documents: revisions
+      require a change note, old versions frozen. Study attachment (Usage tab) lands
+      with screeners in 2.4.
 - [ ] 2.4 Public screener pages at `p/[token]`: Turnstile (stubbed in dev) + rate limits; eligibility rules → Enrollment status
 - [ ] 2.5 Enrollment lifecycle (screened → eligible → consented → active → completed/withdrawn/excluded) + pilot-enrollment flag
 - [ ] 2.6 Consent flow: page rendered from approved Document version, e-signature (encrypted), consent-to-recontact flag, re-consent on amendment

@@ -46,6 +46,9 @@ const TONES: Record<string, StatusTone> = {
   irb_reviewed: "info",
   irb_exempt: "warning",
   internal_pilot: "pilot",
+  // Instruments (spec §4 kept-feature 4)
+  simple_form: "info",
+  external: "neutral",
   // Participants (spec §3.4) — do-not-contact is deliberately loud
   do_not_contact: "danger",
   preferred: "info",

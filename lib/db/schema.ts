@@ -386,6 +386,69 @@ export const contactChannels = pgTable("contact_channels", {
 
 export type ContactChannel = typeof contactChannels.$inferSelect;
 
+// Instruments (spec §2.1, §4 kept-feature 4): the lab-wide library of
+// simple forms (screeners, consent add-ons, diary entries — item types,
+// no branching) and records of external instruments (Qualtrics links).
+// Versioned like documents: editing always creates a new version, so
+// responses can reference the exact definition they were collected with.
+export const instrumentKind = pgEnum("instrument_kind", [
+  "simple_form",
+  "external",
+]);
+
+export const instrumentPurpose = pgEnum("instrument_purpose", [
+  "screener",
+  "diary",
+  "consent_addon",
+  "other",
+]);
+
+export const instruments = pgTable("instruments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  kind: instrumentKind("kind").notNull(),
+  purpose: instrumentPurpose("purpose").notNull().default("other"),
+  currentVersion: integer("current_version").notNull().default(0),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Instrument = typeof instruments.$inferSelect;
+
+// Simple forms carry `items`/`scoring` (validated by lib/objects/forms.ts);
+// external records carry `externalUrl`. Both may note what changed.
+export const instrumentVersions = pgTable("instrument_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  instrumentId: uuid("instrument_id")
+    .notNull()
+    .references(() => instruments.id, { onDelete: "cascade" }),
+  versionNumber: integer("version_number").notNull(),
+  items: jsonb("items").$type<unknown[]>(),
+  scoring: jsonb("scoring").$type<unknown[]>(),
+  externalUrl: text("external_url"),
+  changeNote: text("change_note").notNull().default(""),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("instrument_versions_version_unique").on(
+    table.instrumentId,
+    table.versionNumber,
+  ),
+]);
+
+export type InstrumentVersion = typeof instrumentVersions.$inferSelect;
+
 // Milestones / Tasks (spec §2.1, §3.7): timeline items with owners, due
 // dates and dependencies; belong to a Study or to the Project itself.
 // "Blocked" is derived (an unfinished dependency), never stored.
