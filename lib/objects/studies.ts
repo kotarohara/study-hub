@@ -2,10 +2,12 @@
 // recruiting → running → analysis → archived; transitions are validated
 // against an explicit map and audited. Visibility follows the parent
 // project (PI sees all; others see studies of assigned projects).
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client.ts";
 import {
   conditions,
+  documents,
+  documentVersions,
   type Member,
   type Project,
   projects,
@@ -290,6 +292,42 @@ export async function duplicateStudy(
           position: c.position,
         })),
       );
+    }
+    // Copy study-attached documents: latest version becomes v1 of a fresh
+    // DRAFT document — approval status never carries over to a new study.
+    const sourceDocs = await tx
+      .select()
+      .from(documents)
+      .where(eq(documents.studyId, opts.study.id));
+    for (const doc of sourceDocs) {
+      const latest = await tx.query.documentVersions.findFirst({
+        where: and(
+          eq(documentVersions.documentId, doc.id),
+          eq(documentVersions.versionNumber, doc.currentVersion),
+        ),
+      });
+      const [docCopy] = await tx
+        .insert(documents)
+        .values({
+          projectId: doc.projectId,
+          studyId: copy.id,
+          title: doc.title,
+          kind: doc.kind,
+          currentVersion: 1,
+          createdBy: opts.actor.id,
+        })
+        .returning();
+      if (latest) {
+        await tx.insert(documentVersions).values({
+          documentId: docCopy.id,
+          versionNumber: 1,
+          content: latest.content,
+          fileKey: latest.fileKey, // immutable blob, safe to share
+          fileName: latest.fileName,
+          changeRationale: `Duplicated from study "${opts.study.name}"`,
+          createdBy: opts.actor.id,
+        });
+      }
     }
     await audit(tx, {
       action: "study.duplicated",

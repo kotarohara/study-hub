@@ -32,6 +32,11 @@ const TONES: Record<string, StatusTone> = {
   completed: "success",
   withdrawn: "warning",
   excluded: "danger",
+  // Document review workflow (spec §3.3)
+  internal_review: "info",
+  submitted: "info",
+  approved: "success",
+  revisions_requested: "warning",
   // Oversight pathways (spec §3.3) — internal pilot is deliberately loud
   irb_reviewed: "info",
   irb_exempt: "warning",

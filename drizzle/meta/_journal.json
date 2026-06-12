@@ -50,6 +50,13 @@
       "when": 1781261557364,
       "tag": "0006_absent_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781264079137,
+      "tag": "0007_broad_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

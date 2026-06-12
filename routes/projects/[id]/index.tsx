@@ -1,7 +1,13 @@
 import { HttpError, page } from "fresh";
 import { define } from "../../../utils.ts";
 import { getDb } from "../../../lib/db/client.ts";
-import type { Member, Project, Study } from "../../../lib/db/schema.ts";
+import type {
+  Document,
+  Member,
+  Project,
+  Study,
+} from "../../../lib/db/schema.ts";
+import { listDocumentsOfProject } from "../../../lib/objects/documents.ts";
 import {
   getProjectFor,
   listAddableMembers,
@@ -20,12 +26,14 @@ interface Data {
   projectMembers: Member[];
   addable: Member[];
   studies: Study[];
+  documents: Document[];
 }
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "members", label: "Members" },
   { id: "studies", label: "Studies" },
+  { id: "documents", label: "Documents" },
 ];
 
 export const handler = define.handlers({
@@ -48,6 +56,9 @@ export const handler = define.handlers({
       addable: onMembersTab ? await listAddableMembers(db, project.id) : [],
       studies: activeTab === "studies"
         ? await listStudiesOfProject(db, project.id)
+        : [],
+      documents: activeTab === "documents"
+        ? await listDocumentsOfProject(db, project.id)
         : [],
     });
   },
@@ -173,6 +184,36 @@ export default define.page<typeof handler>(({ data, state, url }) => {
                   Add member
                 </button>
               </form>
+            )}
+          </div>
+        )}
+
+        {data.activeTab === "documents" && (
+          <div class="space-y-4">
+            <div class="flex flex-wrap gap-2">
+              {data.documents.length === 0 && (
+                <p class="text-sm text-gray-500">No documents yet.</p>
+              )}
+              {data.documents.map((d) => (
+                <Chip
+                  key={d.id}
+                  href={`/documents/${d.id}`}
+                  icon="▤"
+                  label={d.title}
+                  sublabel={`${
+                    d.kind.replaceAll("_", " ")
+                  } · v${d.currentVersion}`}
+                  status={d.reviewStatus}
+                />
+              ))}
+            </div>
+            {canManage && project.status === "active" && (
+              <a
+                href={`/documents/new?project=${project.id}`}
+                class="inline-block rounded-card border border-brand-600 bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              >
+                New document
+              </a>
             )}
           </div>
         )}

@@ -166,7 +166,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       ⚠ Deliberate deferral: Enrollments don't exist until Phase 2, so assignment-of-enrollment
       rows + per-assignment audit events are wired in **2.5** using this engine — no premature
       enrollment stub table was created.
-- [ ] 1.5 Documents: upload/create, version history + diff, review statuses, reviewer comments
+- [x] 1.5 Documents: upload/create, version history + diff, review statuses, reviewer comments
+      — `documents` + `document_versions` + `document_comments` (migration 0007). Versions are
+      in-app text (diffable, LCS line diff in `lib/objects/diff.ts`) OR uploaded files (FileStore,
+      10 MB cap, presigned download). Review workflow draft → internal_review → submitted →
+      approved/revisions_requested with an explicit transition map; **recording approval is
+      PI-only** (it will gate recruiting in 1.7); adding a version requires a change rationale and
+      resets status to draft — approval never carries over. duplicateStudy copies study-attached
+      documents (latest version → fresh v1 draft). Routes: `/documents` collection, `new`,
+      `[id]` (Content/Versions/Comments tabs), `diff`, `transition`, `versions/new`, `download`;
+      Documents tabs on project + study detail; nav enabled. Comments: assistant+.
 - [ ] 1.6 Oversight pathway selector: IRB-reviewed / IRB-exempt (reference required) / Internal Pilot (PI confirmation + justification → audit log; permanent PILOT badge; pilot data-quarantine flag)
 - [ ] 1.7 IRB workflow: merge-field document templates from Study fields, approval metadata (protocol #, dates), expiry warnings, recruiting guard (blocked until approved consent Document)
 - [ ] 1.8 "Promote to full study" action (duplicate into fresh IRB-reviewed Study, zero data carry-over) + tests

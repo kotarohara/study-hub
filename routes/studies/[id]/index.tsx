@@ -10,7 +10,8 @@ import {
   type StudyWithProject,
 } from "../../../lib/objects/studies.ts";
 import { listConditions } from "../../../lib/objects/design.ts";
-import type { Condition } from "../../../lib/db/schema.ts";
+import { listDocumentsOfStudy } from "../../../lib/objects/documents.ts";
+import type { Condition, Document } from "../../../lib/db/schema.ts";
 import { Layout } from "../../../components/Layout.tsx";
 import { DetailView } from "../../../components/ooui/DetailView.tsx";
 import { Stepper } from "../../../components/ooui/Stepper.tsx";
@@ -25,6 +26,7 @@ interface Data {
   found: StudyWithProject;
   activeTab: string;
   conditions: Condition[];
+  documents: Document[];
 }
 
 const TABS = [
@@ -53,6 +55,9 @@ export const handler = define.handlers({
       activeTab,
       conditions: activeTab === "design"
         ? await listConditions(getDb(), found.study.id)
+        : [],
+      documents: activeTab === "documents"
+        ? await listDocumentsOfStudy(getDb(), found.study.id)
         : [],
     });
   },
@@ -212,9 +217,31 @@ export default define.page<typeof handler>(({ data, state, url }) => {
           </div>
         )}
         {data.activeTab === "documents" && (
-          <p class="text-sm text-gray-600">
-            IRB protocols and consent documents arrive in Phase 1.5.
-          </p>
+          <div class="space-y-4">
+            <div class="flex flex-wrap gap-2">
+              {data.documents.length === 0 && (
+                <p class="text-sm text-gray-500">No documents yet.</p>
+              )}
+              {data.documents.map((d) => (
+                <Chip
+                  key={d.id}
+                  href={`/documents/${d.id}`}
+                  icon="▤"
+                  label={d.title}
+                  sublabel={`${
+                    d.kind.replaceAll("_", " ")
+                  } · v${d.currentVersion}`}
+                  status={d.reviewStatus}
+                />
+              ))}
+            </div>
+            <a
+              href={`/documents/new?study=${study.id}`}
+              class="inline-block rounded-card border border-brand-600 bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              New document
+            </a>
+          </div>
         )}
       </DetailView>
     </Layout>

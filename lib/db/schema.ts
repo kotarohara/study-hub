@@ -217,6 +217,99 @@ export const conditions = pgTable("conditions", {
 
 export type Condition = typeof conditions.$inferSelect;
 
+// Documents (spec §2.1, §3.3): IRB protocols, consent forms, recruitment
+// material, debrief scripts, amendments — versioned, with review status.
+export const documentKind = pgEnum("document_kind", [
+  "irb_protocol",
+  "consent_form",
+  "recruitment_material",
+  "debrief",
+  "amendment",
+  "other",
+]);
+
+export const documentStatus = pgEnum("document_status", [
+  "draft",
+  "internal_review",
+  "submitted",
+  "approved",
+  "revisions_requested",
+]);
+
+export const documents = pgTable("documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  /** Optional attachment to a specific study within the project. */
+  studyId: uuid("study_id").references(() => studies.id, {
+    onDelete: "cascade",
+  }),
+  title: text("title").notNull(),
+  kind: documentKind("kind").notNull(),
+  /** Review status of the CURRENT version; adding a version resets it to
+   * draft — a new revision is never implicitly approved. */
+  reviewStatus: documentStatus("review_status").notNull().default("draft"),
+  currentVersion: integer("current_version").notNull().default(0),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Document = typeof documents.$inferSelect;
+
+// Either in-app text (`content`, diffable) or an uploaded file (`fileKey`
+// in the files bucket).
+export const documentVersions = pgTable("document_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  documentId: uuid("document_id")
+    .notNull()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  versionNumber: integer("version_number").notNull(),
+  content: text("content"),
+  fileKey: text("file_key"),
+  fileName: text("file_name"),
+  /** Amendment workflow: why this version exists (required from v2 on). */
+  changeRationale: text("change_rationale").notNull().default(""),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("document_versions_doc_version_unique").on(
+    table.documentId,
+    table.versionNumber,
+  ),
+]);
+
+export type DocumentVersion = typeof documentVersions.$inferSelect;
+
+export const documentComments = pgTable("document_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  documentId: uuid("document_id")
+    .notNull()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  /** Version the comment refers to (null = the document in general). */
+  versionNumber: integer("version_number"),
+  authorId: uuid("author_id")
+    .notNull()
+    .references(() => members.id),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type DocumentComment = typeof documentComments.$inferSelect;
+
 // Append-only audit log (spec §4: PII views/exports, consent changes,
 // deletions, payment approvals). Immutability is enforced in the database
 // by triggers (see migration 0002) — UPDATE/DELETE/TRUNCATE raise.
