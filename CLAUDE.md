@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository State
 
-This repository is **pre-implementation**. It contains only `study-hub-spec.md` (Draft v0.5) — the full specification for StudyHub, a user study management system for a single HCI research lab. There is no application code, build system, or test suite yet. **`study-hub-spec.md` is the source of truth**; read it before implementing anything, and keep implementations consistent with its Decision Log (§9) and phase plan (§8).
+This repository is **pre-implementation**. It contains `study-hub-spec.md` (Draft v0.5) — the full specification for StudyHub, a user study management system for a single HCI research lab — and `TODO.md`, the task-level implementation plan. There is no application code, build system, or test suite yet. **`study-hub-spec.md` is the source of truth**; read it before implementing anything, and keep implementations consistent with its Decision Log (§9) and phase plan (§8). **Track progress in `TODO.md`** — work it top-to-bottom, check off completed tasks, and note divergences inline.
+
+**Local-first development:** everything must run and be testable locally (Docker Compose with Postgres, MinIO for S3, Mailpit for email; fake adapters for Telegram/Discord/Notion; no test may need network or real credentials). AWS deployment is deferred to the final phase — see TODO.md's ground rules.
 
 ## What StudyHub Is
 
