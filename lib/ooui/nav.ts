@@ -16,7 +16,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Projects",
     href: "/projects",
     icon: "▣",
-    enabled: false, // Phase 1.1
+    enabled: true,
   },
   {
     id: "studies",

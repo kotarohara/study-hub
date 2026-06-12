@@ -5,6 +5,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -72,6 +73,45 @@ export const invites = pgTable("invites", {
 });
 
 export type Invite = typeof invites.$inferSelect;
+
+// Projects (spec §2.1): the container for studies, documents and members.
+// Projects have a simple active/archived lifecycle; the rich lifecycle
+// (draft → IRB review → …) belongs to Studies.
+export const projectStatus = pgEnum("project_status", ["active", "archived"]);
+
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  status: projectStatus("status").notNull().default("active"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Project = typeof projects.$inferSelect;
+
+// Which members belong to which project (spec §3.10: researchers and
+// assistants act within their assigned projects; the PI sees everything).
+export const projectMembers = pgTable("project_members", {
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  addedAt: timestamp("added_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.projectId, table.memberId] }),
+]);
 
 // Append-only audit log (spec §4: PII views/exports, consent changes,
 // deletions, payment approvals). Immutability is enforced in the database

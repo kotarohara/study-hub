@@ -130,7 +130,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 1 — Studies & Documents
 
-- [ ] 1.1 Project CRUD + membership (collection/detail views, archive)
+- [x] 1.1 Project CRUD + membership (collection/detail views, archive)
+      — `projects` + `project_members` tables (migration 0003); domain logic in `lib/objects/projects.ts`
+      with visibility rules (PI sees all, others only assigned projects) and audited mutations
+      (create/update/archive/unarchive/member add+remove — membership changes are idempotent and
+      only audit real changes). Routes: `/projects` collection, `/projects/new`, `/projects/[id]`
+      (Overview/Members/Studies tabs; Members tab has chip list + add/remove for researcher+),
+      `/projects/[id]/edit`, archive/unarchive POSTs. Archive makes the project read-only (edit and
+      membership changes are refused at both the action-gating and handler level). Member detail
+      Overview now shows the member's project chips. Creator auto-joins their project. Seed adds an
+      "Example Project". Project create permission: researcher+.
 - [ ] 1.2 Study CRUD: lifecycle states (draft → IRB review → recruiting → running → analysis → archived) + stepper; state-gated actions; duplication (design + docs + timeline, minus participants/data)
 - [ ] 1.3 Design editor: structured fields (RQs, hypotheses, IVs/DVs, conditions, design type, target N, exclusion criteria) + one-pager render
 - [ ] 1.4 Condition assignment engine: random + manual counterbalanced assignment with audit trail + tests
