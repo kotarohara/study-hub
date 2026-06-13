@@ -162,6 +162,14 @@ export function FunnelPanel(props: {
         >
           Screener settings →
         </a>
+        {props.canOperate && (
+          <a
+            href={`/studies/${study.id}/recruit`}
+            class="text-sm text-brand-700 hover:underline"
+          >
+            Re-recruit from pool →
+          </a>
+        )}
       </section>
     </div>
   );

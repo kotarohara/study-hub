@@ -280,7 +280,14 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       pause/resume (auto-pause cut per spec). Pilot enrollments excluded from every number,
       reported separately. ⚠ Divergence: quotas are per CONDITION + overall; demographic
       *strata* quotas need a stratum-definition feature that doesn't exist — revisit if needed.
-- [ ] 2.8 Re-recruitment: pool filtering + bulk invites via preferred ContactChannel
+- [x] 2.8 Re-recruitment: pool filtering + bulk invites via preferred ContactChannel
+      `/studies/[id]/recruit` (assistant+): filter the pool by gender/birth-year/source with a
+      consent-to-recontact guard ON by default (latest consent anywhere must allow recontact;
+      untick for never-consented fresh entries). DNC and already-enrolled are always excluded.
+      Bulk invite creates screened enrollments (per-enrollment audit + one summary event with
+      codes only) and renders a run sheet of preferred channels (preferred flag, else oldest)
+      for manual sending — audited as a pii.view. ⚠ "Invite" = enrollment + run sheet until
+      the messaging core (3.3+) delivers automatically.
 
 ## Phase 3 — Sessions, Reminders & Comms *(first usable release)*
 
