@@ -552,6 +552,52 @@ export const screenerResponses = pgTable("screener_responses", {
 
 export type ScreenerResponse = typeof screenerResponses.$inferSelect;
 
+// Sessions (spec §2.1, §4 kept-feature 2): a scheduled data-collection
+// encounter — a lab slot, interview, or diary window. The auth `sessions`
+// table above is unrelated; this is the domain object, stored as
+// `study_sessions`. A slot starts life `open` (publishable, self-bookable
+// via magic link); booking attaches an Enrollment; lab members then track
+// completion and no-shows. Room/equipment booking was cut (spec §4) — a
+// free-text `location` field suffices.
+export const sessionStatus = pgEnum("session_status", [
+  "open",
+  "booked",
+  "completed",
+  "no_show",
+  "cancelled",
+]);
+
+export const studySessions = pgTable("study_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studyId: uuid("study_id")
+    .notNull()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  /** Set when booked; reverts to null when a booking is cancelled and the
+   * slot returns to `open`. */
+  enrollmentId: uuid("enrollment_id").references(() => enrollments.id, {
+    onDelete: "set null",
+  }),
+  status: sessionStatus("status").notNull().default("open"),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  /** Free-text location/equipment (spec §4: room booking cut). */
+  location: text("location").notNull().default(""),
+  /** Pilot data quarantine: inherited from the booking enrollment. */
+  isPilot: boolean("is_pilot").notNull().default(false),
+  createdBy: uuid("created_by").references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("study_sessions_study_idx").on(table.studyId),
+  index("study_sessions_enrollment_idx").on(table.enrollmentId),
+]);
+
+export type StudySession = typeof studySessions.$inferSelect;
+
 // Consents (spec §4 kept-feature 1): a participant's signed agreement to
 // a specific APPROVED version of the study's consent Document. Amendments
 // (new approved versions) leave old rows intact and outdated — re-consent

@@ -291,7 +291,19 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 3 — Sessions, Reminders & Comms *(first usable release)*
 
-- [ ] 3.1 Session scheduling: slot publishing, self-booking via magic link, reschedule/no-show tracking
+- [x] 3.1 Session scheduling: slot publishing, self-booking via magic link, reschedule/no-show tracking
+      `study_sessions` table (domain "Session"; distinct from the auth `sessions` table) with
+      lifecycle open → booked → completed/no_show/cancelled (+ booked→open on unbook). Study
+      "Sessions" tab (researcher+ publishes slots; assistant+ books on behalf, marks
+      completed/no-show, unbooks; researcher+ cancels). Self-booking page `p/[token]/book` via
+      purpose-scoped "booking" magic link (30-day TTL, rate-limited, no Turnstile): participant
+      books an open slot or moves their booking (atomic `rescheduleBooking`), or cancels.
+      Booking is an atomic claim (re-checks status=open under the update) so two participants
+      can't grab one slot; pilot flag inherited from the enrollment. Booking-link issuance
+      (`/enrollments/[id]/booking-link`, assistant+, audited). All session events audited with
+      the pseudonymous code only. datetime-local inputs interpreted in server tz (ap-southeast-1).
+      ⚠ Single active booking per enrollment in the self-book UI (multi-session studies book
+      lab-side); ICS feeds are 3.2; automated link delivery is 3.6.
 - [ ] 3.2 ICS feed generation + tests
 - [ ] 3.3 Messaging core: Message object, `ChannelAdapter` interface, templates with merge fields, delivery log
 - [ ] 3.4 Email adapter: SMTP (Mailpit) for dev, SES for prod behind same interface; bounce-webhook route (`hooks/ses-bounces.ts`) tested with simulated SNS payloads

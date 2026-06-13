@@ -41,6 +41,12 @@ import {
 } from "../../../lib/objects/consents.ts";
 import { type StudyFunnel, studyFunnel } from "../../../lib/objects/funnel.ts";
 import { FunnelPanel } from "../../../components/FunnelPanel.tsx";
+import {
+  listSessionsOfStudy,
+  type SessionRow,
+} from "../../../lib/objects/sessions.ts";
+import { isTerminal } from "../../../lib/objects/enrollments.ts";
+import { SessionPanel } from "../../../components/SessionPanel.tsx";
 import { audit } from "../../../lib/audit/log.ts";
 import { clientHost } from "../../../lib/auth/limiters.ts";
 import { Layout } from "../../../components/Layout.tsx";
@@ -64,6 +70,8 @@ interface Data {
   pool: Participant[];
   consent: [string, ConsentStatus][];
   funnel: StudyFunnel | null;
+  sessions: SessionRow[];
+  bookable: { id: string; code: string }[];
 }
 
 const TABS = [
@@ -71,6 +79,7 @@ const TABS = [
   { id: "design", label: "Design" },
   { id: "participants", label: "Participants" },
   { id: "recruitment", label: "Recruitment" },
+  { id: "sessions", label: "Sessions" },
   { id: "documents", label: "Documents" },
   { id: "timeline", label: "Timeline" },
 ];
@@ -127,6 +136,14 @@ export const handler = define.handlers({
       funnel: activeTab === "recruitment"
         ? await studyFunnel(getDb(), found.study)
         : null,
+      sessions: activeTab === "sessions"
+        ? await listSessionsOfStudy(getDb(), found.study.id)
+        : [],
+      bookable: activeTab === "sessions"
+        ? (await listEnrollmentsOfStudy(getDb(), found.study.id))
+          .filter((r) => !isTerminal(r.enrollment.status))
+          .map((r) => ({ id: r.enrollment.id, code: r.participantCode }))
+        : [],
     });
   },
 });
@@ -445,6 +462,15 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             study={study}
             funnel={data.funnel}
             canOperate={hasRole(me.role, "assistant")}
+          />
+        )}
+        {data.activeTab === "sessions" && (
+          <SessionPanel
+            study={study}
+            rows={data.sessions}
+            bookable={data.bookable}
+            canOperate={hasRole(me.role, "assistant")}
+            canManage={hasRole(me.role, "researcher")}
           />
         )}
         {data.activeTab === "timeline" && (

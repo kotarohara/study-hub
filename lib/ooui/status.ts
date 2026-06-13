@@ -49,9 +49,13 @@ const TONES: Record<string, StatusTone> = {
   // Instruments (spec §4 kept-feature 4)
   simple_form: "info",
   external: "neutral",
-  // Screeners (spec §3.4)
+  // Screeners (spec §3.4); "open" is reused by session slots
   open: "success",
   paused: "warning",
+  // Sessions (spec §4 kept-feature 2); "completed" reused from enrollments
+  booked: "info",
+  no_show: "danger",
+  cancelled: "neutral",
   // Consent status per enrollment (spec §4 kept-feature 1)
   consent_current: "success",
   consent_outdated: "warning",
