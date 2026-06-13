@@ -146,11 +146,14 @@ Deno.test("publish + self-book: one slot, atomic claim, magic link, audited", as
     assert.equal(booked.enrollmentId, adaEnr.id);
     assert.equal((await listOpenSlots(db, study.id)).length, 0);
 
-    // The same slot cannot be booked twice (Ben arrives late).
+    // The same slot cannot be booked twice (Ben arrives late, holding a
+    // stale open slot object). The pre-check passes on the stale status, so
+    // the atomic claim — UPDATE ... WHERE status = 'open' returning nothing —
+    // is what rejects the double-booking.
     const benEnr = await enroll(db, study, ben, researcher);
     await assert.rejects(
       () => bookSession(db, { session: slot, enrollment: benEnr, actor: null }),
-      /no longer available/,
+      /just taken|no longer available/,
     );
 
     // Booking link round-trips to the enrollment.
