@@ -23,7 +23,26 @@ import { listProjectMembers } from "../../../lib/objects/projects.ts";
 import { MilestoneList } from "../../../components/ooui/MilestoneList.tsx";
 import TimelineGantt from "../../../islands/TimelineGantt.tsx";
 import { type GanttItem, ganttRange } from "../../../lib/ooui/gantt.ts";
-import type { Condition, Document, Member } from "../../../lib/db/schema.ts";
+import type {
+  Condition,
+  Document,
+  Member,
+  Participant,
+} from "../../../lib/db/schema.ts";
+import {
+  type EnrollmentRow,
+  listEnrollmentsOfStudy,
+} from "../../../lib/objects/enrollments.ts";
+import { listParticipants } from "../../../lib/objects/participants.ts";
+import { EnrollmentPanel } from "../../../components/EnrollmentPanel.tsx";
+import {
+  type ConsentStatus,
+  consentStatusOfStudy,
+} from "../../../lib/objects/consents.ts";
+import { type StudyFunnel, studyFunnel } from "../../../lib/objects/funnel.ts";
+import { FunnelPanel } from "../../../components/FunnelPanel.tsx";
+import { audit } from "../../../lib/audit/log.ts";
+import { clientHost } from "../../../lib/auth/limiters.ts";
 import { Layout } from "../../../components/Layout.tsx";
 import { DetailView } from "../../../components/ooui/DetailView.tsx";
 import { Stepper } from "../../../components/ooui/Stepper.tsx";
@@ -41,11 +60,17 @@ interface Data {
   documents: Document[];
   milestones: MilestoneWithMeta[];
   team: Member[];
+  enrollmentRows: EnrollmentRow[];
+  pool: Participant[];
+  consent: [string, ConsentStatus][];
+  funnel: StudyFunnel | null;
 }
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "design", label: "Design" },
+  { id: "participants", label: "Participants" },
+  { id: "recruitment", label: "Recruitment" },
   { id: "documents", label: "Documents" },
   { id: "timeline", label: "Timeline" },
 ];
@@ -65,6 +90,9 @@ export const handler = define.handlers({
     const activeTab = TABS.some((t) => t.id === ctx.url.searchParams.get("tab"))
       ? ctx.url.searchParams.get("tab")!
       : "overview";
+    const enrollmentRows = activeTab === "participants"
+      ? await listEnrollmentsOfStudy(getDb(), found.study.id)
+      : [];
     return page<Data>({
       found,
       activeTab,
@@ -80,9 +108,61 @@ export const handler = define.handlers({
       team: activeTab === "timeline"
         ? await listProjectMembers(getDb(), found.project.id)
         : [],
+      enrollmentRows,
+      pool: activeTab === "participants"
+        ? await loadEnrollablePool({
+          member: ctx.state.member!,
+          studyId: found.study.id,
+          requestId: ctx.state.requestId,
+          ip: clientHost(ctx.info),
+        })
+        : [],
+      consent: activeTab === "participants"
+        ? [...(await consentStatusOfStudy(
+          getDb(),
+          found.study,
+          enrollmentRows.map((r) => r.enrollment),
+        )).entries()]
+        : [],
+      funnel: activeTab === "recruitment"
+        ? await studyFunnel(getDb(), found.study)
+        : null,
     });
   },
 });
+
+/** Pool minus already-enrolled and do-not-contact, for the enroll
+ * dropdown (assistant+). Names are decrypted PII -> audited. */
+async function loadEnrollablePool(
+  opts: {
+    member: Member;
+    studyId: string;
+    requestId: string;
+    ip: string;
+  },
+): Promise<Participant[]> {
+  if (!hasRole(opts.member.role, "assistant")) return [];
+  const db = getDb();
+  const enrolled = new Set(
+    (await listEnrollmentsOfStudy(db, opts.studyId)).map(
+      (r) => r.enrollment.participantId,
+    ),
+  );
+  const pool = (await listParticipants(db)).filter(
+    (p) => !enrolled.has(p.id) && !p.doNotContact,
+  );
+  if (pool.length > 0) {
+    await audit(db, {
+      action: "pii.list_viewed",
+      actorId: opts.member.id,
+      objectType: "participant",
+      details: { count: pool.length, via: "study_enroll" },
+      requestId: opts.requestId,
+      ip: opts.ip,
+    });
+  }
+  return pool;
+}
 
 export default define.page<typeof handler>(({ data, state, url }) => {
   const me = state.member!;
@@ -108,6 +188,14 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         minRole: "researcher",
         enabledIn: EDITABLE_STATES,
       },
+      ...(!isPilotStudy(study)
+        ? [{
+          id: "screener",
+          label: "Screener",
+          href: `/studies/${study.id}/screener`,
+          method: "get" as const,
+        }]
+        : []),
       {
         id: "pathway",
         label: "Change pathway",
@@ -341,6 +429,23 @@ export default define.page<typeof handler>(({ data, state, url }) => {
               New document
             </a>
           </div>
+        )}
+        {data.activeTab === "participants" && (
+          <EnrollmentPanel
+            study={study}
+            rows={data.enrollmentRows}
+            pool={data.pool}
+            consent={new Map(data.consent)}
+            canOperate={hasRole(me.role, "assistant")}
+            canPilotToggle={hasRole(me.role, "researcher")}
+          />
+        )}
+        {data.activeTab === "recruitment" && data.funnel && (
+          <FunnelPanel
+            study={study}
+            funnel={data.funnel}
+            canOperate={hasRole(me.role, "assistant")}
+          />
         )}
         {data.activeTab === "timeline" && (
           <div class="space-y-4">

@@ -221,14 +221,73 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 2 — Participants & Recruitment
 
-- [ ] 2.1 Participant + ContactChannel schemas (encrypted PII columns), demographics, do-not-contact flag, participation history
-- [ ] 2.2 Cross-study deduplication warnings on participant create/import
-- [ ] 2.3 Simple-form builder Instrument (item types, no branching) + versioning + scoring rules; external-instrument records (Qualtrics links)
-- [ ] 2.4 Public screener pages at `p/[token]`: Turnstile (stubbed in dev) + rate limits; eligibility rules → Enrollment status
-- [ ] 2.5 Enrollment lifecycle (screened → eligible → consented → active → completed/withdrawn/excluded) + pilot-enrollment flag
-- [ ] 2.6 Consent flow: page rendered from approved Document version, e-signature (encrypted), consent-to-recontact flag, re-consent on amendment
-- [ ] 2.7 Recruitment funnel stats per channel + quota dashboard (per-stratum counts vs targets; manual pause)
-- [ ] 2.8 Re-recruitment: pool filtering + bulk invites via preferred ContactChannel
+- [x] 2.1 Participant + ContactChannel schemas (encrypted PII columns), demographics, do-not-contact flag, participation history
+      Pool at `/participants` (visible to all members; mutations assistant+). `encryptedText`
+      directly in schema for name/notes/channel values; pseudonymous `P-xxxxxxxx` codes.
+      PII views audited at the HANDLER level (`pii.view`, `pii.list_viewed`), mutations audited
+      in `lib/objects/participants.ts` with codes only. Detail tab "History" is a placeholder
+      until enrollments (2.5). Channel verification flag exists; verification flows come with
+      Telegram pairing (3.7).
+- [x] 2.2 Cross-study deduplication warnings on participant create/import
+      Keyed blind index (HMAC-SHA256, `PII_INDEX_SECRET`, never rotate without re-indexing)
+      over normalized `kind:value` in `lib/crypto/blind_index.ts` — warns on create
+      (confirm-anyway, never hard-blocks) + passive banner on the detail page.
+      ⚠ The "import" half re-applies when the CSV importer lands (Phase 4).
+- [x] 2.3 Simple-form builder Instrument (item types, no branching) + versioning + scoring rules; external-instrument records (Qualtrics links)
+      Lab-wide library at `/instruments` (authoring researcher+). Form model in
+      `lib/objects/forms.ts` (Zod): short/long text, number, single/multi choice, likert;
+      scoring rules (sum/mean, likert reverse-scoring); `validateResponse`/`scoreResponse`
+      ready for screeners (2.4) and EDA (Phase 4). Builder is the `FormBuilder` island
+      serializing JSON into hidden inputs (server re-validates); `FormRender` renders
+      previews now and participant forms in 2.4. Versioned like documents: revisions
+      require a change note, old versions frozen. Study attachment (Usage tab) lands
+      with screeners in 2.4.
+- [x] 2.4 Public screener pages at `p/[token]`: Turnstile (stubbed in dev) + rate limits; eligibility rules → Enrollment status
+      One screener per study (configured at `/studies/[id]/screener`, researcher+; pause/resume
+      assistant+): pins an instrument version, eligibility rules (`lib/objects/eligibility.ts`,
+      ANDed min/max + anyOf) validated against it. Public page `p/[token]/screener` (opaque
+      128-bit token; live only while status=open AND study recruiting AND not pilot — spec §3.3
+      no-public-recruitment enforced in domain + page). Turnstile adapter stubs locally, fails
+      closed in unconfigured production; in-process rate limit on POST. Submissions create a
+      memberless pool Participant (encrypted PII, source "screener") + Enrollment
+      (eligible/screened by rules) + response row atomically; eligibility never revealed to the
+      participant; `views` counter feeds funnel stats (2.7).
+- [x] 2.5 Enrollment lifecycle (screened → eligible → consented → active → completed/withdrawn/excluded) + pilot-enrollment flag
+      Explicit transition map in `lib/objects/enrollments.ts`; withdrawn/excluded/completed are
+      terminal; every transition audited in-transaction with the pseudonymous code. Manual
+      enrollment from the pool on the study "Participants" tab (assistant+; DNC participants
+      blocked; one enrollment per participant per study). Pilot flag: forced for Internal Pilot
+      studies, optional dry-run flag otherwise (researcher+ toggle, frozen once terminal).
+      Assignment engine (1.4) wired: assign-condition action on consented/active enrollments,
+      random-balanced or manual sequence per design, pilot enrollments balanced separately,
+      one audit event per assignment. Participant "History" tab + instrument "Usage" tab filled
+      in. "Record consent" stays a manual transition until the consent flow (2.6).
+- [x] 2.6 Consent flow: page rendered from approved Document version, e-signature (encrypted), consent-to-recontact flag, re-consent on amendment
+      `consents` rows pin (document, version); history immutable — amendments (new APPROVED
+      version) flip status to "outdated" and re-consent inserts a new row. Participant page
+      `p/[token]/consent` via purpose-scoped expiring magic link (14 days; rate-limited; no
+      Turnstile — not an open form); typed-name e-signature encrypted at rest; first consent
+      auto-advances eligible→consented in the same transaction; both audit events actorId null.
+      Lab side: consent column + link issuance (audited) on the Participants tab; links shown
+      for manual copy until messaging (3.x) delivers them. ⚠ File-only consent documents can't
+      render on the participant page (text content only) — upload-based consent forms need the
+      file route made participant-safe later.
+- [x] 2.7 Recruitment funnel stats per channel + quota dashboard (per-stratum counts vs targets; manual pause)
+      "Recruitment" tab on the study page: cumulative funnel (viewed from screener views;
+      screened/eligible/consented/completed approximated by CURRENT enrollment status — history
+      not replayed), per-channel breakdown (participant `source`), per-condition quotas vs
+      ceil(targetN / #conditions) with full-quota highlighting, and the manual screener
+      pause/resume (auto-pause cut per spec). Pilot enrollments excluded from every number,
+      reported separately. ⚠ Divergence: quotas are per CONDITION + overall; demographic
+      *strata* quotas need a stratum-definition feature that doesn't exist — revisit if needed.
+- [x] 2.8 Re-recruitment: pool filtering + bulk invites via preferred ContactChannel
+      `/studies/[id]/recruit` (assistant+): filter the pool by gender/birth-year/source with a
+      consent-to-recontact guard ON by default (latest consent anywhere must allow recontact;
+      untick for never-consented fresh entries). DNC and already-enrolled are always excluded.
+      Bulk invite creates screened enrollments (per-enrollment audit + one summary event with
+      codes only) and renders a run sheet of preferred channels (preferred flag, else oldest)
+      for manual sending — audited as a pii.view. ⚠ "Invite" = enrollment + run sheet until
+      the messaging core (3.3+) delivers automatically.
 
 ## Phase 3 — Sessions, Reminders & Comms *(first usable release)*
 

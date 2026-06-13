@@ -1,6 +1,8 @@
-// Database schema (Drizzle). Keep this file free of Deno-specific imports —
-// drizzle-kit (Node-based) loads it directly when generating migrations.
+// Database schema (Drizzle). drizzle-kit loads this file when generating
+// migrations; the encryptedText import is safe because its keyring is
+// resolved lazily at query time, never at module load.
 import {
+  boolean,
   date,
   index,
   integer,
@@ -13,6 +15,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { encryptedText } from "./encrypted.ts";
 
 // Spec §3.10: PI > Researcher > Assistant > Collaborator.
 export const memberRole = pgEnum("member_role", [
@@ -319,6 +322,268 @@ export const documentComments = pgTable("document_comments", {
 });
 
 export type DocumentComment = typeof documentComments.$inferSelect;
+
+// Participants (spec §2.1, §3.4): the lab-wide pool. Records persist
+// across studies for re-recruitment. PII (name, notes, channel values)
+// is app-layer encrypted transparently via the encryptedText column type;
+// demographics used for filtering stay plaintext. The pseudonymous `code`
+// is what appears in datasets, exports, Discord and Notion.
+export const participants = pgTable("participants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Short pseudonymous code used everywhere PII must not appear. */
+  code: text("code").notNull().unique(),
+  /** PII: participant name (encrypted at rest). */
+  name: encryptedText("name").notNull(),
+  /** PII: free-text notes — may contain PII (encrypted at rest). */
+  notes: encryptedText("notes").notNull().default(""),
+  yearOfBirth: integer("year_of_birth"),
+  gender: text("gender").notNull().default(""),
+  /** Where this person was recruited from (flyer, class, friend, …). */
+  source: text("source").notNull().default(""),
+  doNotContact: boolean("do_not_contact").notNull().default(false),
+  /** Member who added the record; null when self-registered via a
+   * public screener (no member actor). */
+  createdBy: uuid("created_by").references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Participant = typeof participants.$inferSelect;
+
+export const contactChannelKind = pgEnum("contact_channel_kind", [
+  "email",
+  "telegram",
+  "phone",
+  "paypal",
+  "prolific",
+]);
+
+export type ContactChannelKind = (typeof contactChannelKind.enumValues)[number];
+
+export const contactChannels = pgTable("contact_channels", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  participantId: uuid("participant_id")
+    .notNull()
+    .references(() => participants.id, { onDelete: "cascade" }),
+  kind: contactChannelKind("kind").notNull(),
+  /** PII: the address / chat id / handle (encrypted at rest). */
+  value: encryptedText("value").notNull(),
+  /** Keyed blind index of the normalized value — dedup and lookup. */
+  valueIndex: text("value_index").notNull(),
+  verified: boolean("verified").notNull().default(false),
+  isPreferred: boolean("is_preferred").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("contact_channels_participant_idx").on(table.participantId),
+  index("contact_channels_value_index_idx").on(table.valueIndex),
+]);
+
+export type ContactChannel = typeof contactChannels.$inferSelect;
+
+// Instruments (spec §2.1, §4 kept-feature 4): the lab-wide library of
+// simple forms (screeners, consent add-ons, diary entries — item types,
+// no branching) and records of external instruments (Qualtrics links).
+// Versioned like documents: editing always creates a new version, so
+// responses can reference the exact definition they were collected with.
+export const instrumentKind = pgEnum("instrument_kind", [
+  "simple_form",
+  "external",
+]);
+
+export const instrumentPurpose = pgEnum("instrument_purpose", [
+  "screener",
+  "diary",
+  "consent_addon",
+  "other",
+]);
+
+export const instruments = pgTable("instruments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  kind: instrumentKind("kind").notNull(),
+  purpose: instrumentPurpose("purpose").notNull().default("other"),
+  currentVersion: integer("current_version").notNull().default(0),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Instrument = typeof instruments.$inferSelect;
+
+// Simple forms carry `items`/`scoring` (validated by lib/objects/forms.ts);
+// external records carry `externalUrl`. Both may note what changed.
+export const instrumentVersions = pgTable("instrument_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  instrumentId: uuid("instrument_id")
+    .notNull()
+    .references(() => instruments.id, { onDelete: "cascade" }),
+  versionNumber: integer("version_number").notNull(),
+  items: jsonb("items").$type<unknown[]>(),
+  scoring: jsonb("scoring").$type<unknown[]>(),
+  externalUrl: text("external_url"),
+  changeNote: text("change_note").notNull().default(""),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("instrument_versions_version_unique").on(
+    table.instrumentId,
+    table.versionNumber,
+  ),
+]);
+
+export type InstrumentVersion = typeof instrumentVersions.$inferSelect;
+
+// Screeners (spec §3.4): a study's public recruitment form — a pinned
+// version of a simple-form instrument plus eligibility rules. The page
+// lives at p/[token]/screener; the token is an opaque capability stored
+// here (pause or regenerate to revoke). Internal Pilot studies never get
+// one (spec §3.3: no public recruitment).
+export const screenerStatus = pgEnum("screener_status", ["open", "paused"]);
+
+export const screeners = pgTable("screeners", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studyId: uuid("study_id")
+    .notNull()
+    .unique()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  instrumentId: uuid("instrument_id")
+    .notNull()
+    .references(() => instruments.id),
+  /** Pinned at configure time; revising the instrument never silently
+   * changes a live screener. */
+  instrumentVersionNumber: integer("instrument_version_number").notNull(),
+  /** Eligibility rules (validated by lib/objects/eligibility.ts). */
+  eligibility: jsonb("eligibility").$type<unknown[]>().notNull(),
+  status: screenerStatus("status").notNull().default("open"),
+  token: text("token").notNull().unique(),
+  /** Public page views, for funnel stats (viewed → screened → …). */
+  views: integer("views").notNull().default(0),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Screener = typeof screeners.$inferSelect;
+
+// Enrollments (spec §2.1): a participant's involvement in one study.
+// Created here by screeners (2.4); the full lifecycle with transitions,
+// manual enrollment and the pilot flag lands in 2.5.
+export const enrollmentStatus = pgEnum("enrollment_status", [
+  "screened",
+  "eligible",
+  "consented",
+  "active",
+  "completed",
+  "withdrawn",
+  "excluded",
+]);
+
+export const enrollments = pgTable("enrollments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studyId: uuid("study_id")
+    .notNull()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  participantId: uuid("participant_id")
+    .notNull()
+    .references(() => participants.id, { onDelete: "cascade" }),
+  status: enrollmentStatus("status").notNull().default("screened"),
+  /** Pilot data quarantine (spec §4 kept-feature 5): excluded from
+   * datasets, quotas and publishable exports by default. */
+  isPilot: boolean("is_pilot").notNull().default(false),
+  conditionId: uuid("condition_id").references(() => conditions.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("enrollments_study_participant_unique").on(
+    table.studyId,
+    table.participantId,
+  ),
+]);
+
+export type Enrollment = typeof enrollments.$inferSelect;
+
+// Screener answers are jsonb, NOT encrypted: screener questions must not
+// ask for PII (contact details go through Participant/ContactChannel on
+// the same submission). Responses pin the instrument version they were
+// collected with.
+export const screenerResponses = pgTable("screener_responses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  screenerId: uuid("screener_id")
+    .notNull()
+    .references(() => screeners.id, { onDelete: "cascade" }),
+  enrollmentId: uuid("enrollment_id")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  instrumentVersionNumber: integer("instrument_version_number").notNull(),
+  answers: jsonb("answers").$type<Record<string, unknown>>().notNull(),
+  eligible: boolean("eligible").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type ScreenerResponse = typeof screenerResponses.$inferSelect;
+
+// Consents (spec §4 kept-feature 1): a participant's signed agreement to
+// a specific APPROVED version of the study's consent Document. Amendments
+// (new approved versions) leave old rows intact and outdated — re-consent
+// inserts a new row, so the history of what was agreed to is immutable.
+export const consents = pgTable("consents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  enrollmentId: uuid("enrollment_id")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  documentId: uuid("document_id")
+    .notNull()
+    // Cascade: documents are only ever deleted via project deletion,
+    // which removes the enrollments (and these rows) anyway.
+    .references(() => documents.id, { onDelete: "cascade" }),
+  documentVersionNumber: integer("document_version_number").notNull(),
+  /** PII: typed-name e-signature (encrypted at rest). */
+  signatureName: encryptedText("signature_name").notNull(),
+  /** May we contact this person about future studies? (spec §4 #1) */
+  consentToRecontact: boolean("consent_to_recontact").notNull().default(false),
+  signedAt: timestamp("signed_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("consents_enrollment_version_unique").on(
+    table.enrollmentId,
+    table.documentId,
+    table.documentVersionNumber,
+  ),
+  index("consents_enrollment_idx").on(table.enrollmentId),
+]);
+
+export type Consent = typeof consents.$inferSelect;
 
 // Milestones / Tasks (spec §2.1, §3.7): timeline items with owners, due
 // dates and dependencies; belong to a Study or to the Project itself.

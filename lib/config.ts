@@ -33,7 +33,15 @@ const ConfigSchema = z.object({
     "expected comma-separated <version>:<base64key> pairs",
   ),
   MAGIC_LINK_SECRET: z.string().min(32),
+  /** Keyed blind index for encrypted PII lookups (dedup). NEVER rotate
+   * without re-indexing contact_channels.value_index. */
+  PII_INDEX_SECRET: z.string().min(32),
   // Schema-level defaults: optional knobs, defaulted in every environment.
+  /** Cloudflare Turnstile for public participant pages. Empty outside
+   * production = local stub (no network); empty IN production fails
+   * closed — public forms reject every submission until configured. */
+  TURNSTILE_SITE_KEY: z.string().default(""),
+  TURNSTILE_SECRET_KEY: z.string().default(""),
   BACKUP_CRON_ENABLED: z.stringbool().default(false),
   BACKUP_CRON: z.string().default("0 18 * * *"), // 02:00 SGT
 });
@@ -55,6 +63,7 @@ const DEV_DEFAULTS: Record<string, string> = {
   MAIL_FROM: "StudyHub <studyhub@localhost>",
   PII_ENCRYPTION_KEYS: "1:c3R1ZHlodWItZGV2LW9ubHktYWVzLWtleS0zMi1ieSE=",
   MAGIC_LINK_SECRET: "studyhub-dev-only-magic-link-secret-do-not-deploy",
+  PII_INDEX_SECRET: "studyhub-dev-only-pii-index-secret-do-not-deploy",
 };
 
 export class ConfigError extends Error {}
