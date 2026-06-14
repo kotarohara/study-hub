@@ -66,9 +66,19 @@ export function SessionPanel(props: {
       )}
 
       <section class="space-y-2">
-        <h2 class="text-sm font-semibold text-gray-900">
-          Schedule ({rows.length})
-        </h2>
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-gray-900">
+            Schedule ({rows.length})
+          </h2>
+          {rows.length > 0 && (
+            <a
+              href={`/studies/${study.id}/calendar.ics`}
+              class="text-xs text-brand-700 hover:underline"
+            >
+              Calendar feed (.ics) ↓
+            </a>
+          )}
+        </div>
         {rows.length === 0
           ? <p class="text-sm text-gray-500">No sessions yet.</p>
           : (

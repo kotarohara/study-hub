@@ -12,6 +12,7 @@ import { getEnrollment, isTerminal } from "../../../lib/objects/enrollments.ts";
 import type { StudySession } from "../../../lib/db/schema.ts";
 import {
   bookSession,
+  calendarLinkFor,
   cancelBooking,
   getSession,
   listOpenSlots,
@@ -36,6 +37,8 @@ interface Data {
   studyName?: string;
   booking?: SlotView | null;
   slots?: SlotView[];
+  /** Subscribable .ics feed of this participant's sessions. */
+  calendarUrl?: string;
   error?: string;
   doneMessage?: string;
 }
@@ -74,6 +77,7 @@ async function render(
     studyName: live.study.name,
     booking: booked ? view(booked) : null,
     slots: slots.map(view),
+    calendarUrl: calendarLinkFor(live.enrollment),
     ...extra,
   };
 }
@@ -223,6 +227,18 @@ export default define.page<typeof handler>(({ data }) => {
               Pick a slot below to book your session.
             </p>
           )}
+
+        {booking && data.calendarUrl && (
+          <p class="text-xs text-gray-500">
+            Add your sessions to your calendar app:{" "}
+            <a
+              href={data.calendarUrl}
+              class="break-all text-brand-700 underline"
+            >
+              subscribe (.ics)
+            </a>
+          </p>
+        )}
 
         <section class="space-y-2">
           <h2 class="text-sm font-semibold text-gray-900">

@@ -20,7 +20,9 @@ import { createEnrollment, transitionEnrollment } from "./enrollments.ts";
 import {
   bookingLinkFor,
   bookSession,
+  calendarLinkFor,
   cancelBooking,
+  enrollmentCalendarEvents,
   listOpenSlots,
   listSessionsOfEnrollment,
   listSessionsOfStudy,
@@ -28,8 +30,11 @@ import {
   publishSlot,
   rescheduleBooking,
   SessionError,
+  studyCalendarEvents,
   verifyBookingToken,
+  verifyCalendarToken,
 } from "./sessions.ts";
+import { buildCalendar } from "../calendar/ics.ts";
 
 const HOUR = 60 * 60 * 1000;
 const future = (offsetHours: number) =>
@@ -282,5 +287,62 @@ Deno.test("pilot inheritance: a pilot enrollment's session is quarantined", asyn
     const rows = await listSessionsOfStudy(db, study.id);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].participantCode, null); // open slot, no booker
+  });
+});
+
+Deno.test("ICS feeds: participant excludes open slots, study uses codes, no PII", async () => {
+  await withEnv(async ({ researcher, study, ada }) => {
+    const db = await getTestDb();
+    const booked = await publishSlot(db, {
+      study,
+      startsAt: future(24),
+      endsAt: future(25),
+      location: "Lab 3A",
+      actor: researcher,
+    });
+    await publishSlot(db, {
+      study,
+      startsAt: future(48),
+      endsAt: future(49),
+      actor: researcher,
+    });
+    const adaEnr = await enroll(db, study, ada, researcher);
+    await bookSession(db, { session: booked, enrollment: adaEnr, actor: null });
+
+    // Participant feed: only their booked session, study name, no PII.
+    const mine = await listSessionsOfEnrollment(db, adaEnr.id);
+    const participantFeed = buildCalendar({
+      name: `${study.name} — my sessions`,
+      events: enrollmentCalendarEvents(study, mine),
+    });
+    assert.equal(participantFeed.match(/BEGIN:VEVENT/g)?.length, 1);
+    assert.ok(participantFeed.includes(`SUMMARY:${study.name}`));
+    assert.ok(participantFeed.includes("DTSTART:"));
+    assert.ok(participantFeed.includes("LOCATION:Lab 3A"));
+    assert.ok(!participantFeed.includes("Ada"));
+
+    // Study feed: every session, open slot labelled, code (not name) shown.
+    const rows = await listSessionsOfStudy(db, study.id);
+    const studyFeed = buildCalendar({
+      name: `${study.name} — sessions`,
+      events: studyCalendarEvents(rows),
+    });
+    assert.equal(studyFeed.match(/BEGIN:VEVENT/g)?.length, 2);
+    assert.ok(studyFeed.includes("SUMMARY:Open slot"));
+    assert.ok(studyFeed.includes(`SUMMARY:${ada.code}`));
+    assert.ok(!studyFeed.includes("Ada"));
+
+    // Calendar subscription link round-trips to the enrollment.
+    const token = calendarLinkFor(adaEnr).split("/p/")[1].replace(
+      "/calendar.ics",
+      "",
+    );
+    assert.equal(verifyCalendarToken(token), adaEnr.id);
+    // A booking token is not a calendar token (purpose scoping).
+    const bookingToken = bookingLinkFor(adaEnr).split("/p/")[1].replace(
+      "/book",
+      "",
+    );
+    assert.equal(verifyCalendarToken(bookingToken), null);
   });
 });

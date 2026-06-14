@@ -304,7 +304,17 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       the pseudonymous code only. datetime-local inputs interpreted in server tz (ap-southeast-1).
       ⚠ Single active booking per enrollment in the self-book UI (multi-session studies book
       lab-side); ICS feeds are 3.2; automated link delivery is 3.6.
-- [ ] 3.2 ICS feed generation + tests
+- [x] 3.2 ICS feed generation + tests
+      Pure RFC 5545 builder in `lib/calendar/ics.ts` (UTC times, TEXT escaping, 75-octet line
+      folding, CRLF) — fully unit-tested. Two feeds, both pseudonymous (no PII): participant
+      subscribable feed `p/[token]/calendar.ics` behind a long-lived (1yr) purpose-scoped
+      "calendar" magic link (calendar apps poll cookie-less, so the token is the capability;
+      excludes open slots, summary = study name); study feed `studies/[id]/calendar.ics`
+      (member-gated download — every session, open slots labelled, booked rows show the
+      pseudonymous code, cancelled → STATUS:CANCELLED, SEQUENCE bumps on reschedule). Subscribe
+      link surfaced on the booking page; .ics download link on the Sessions tab.
+      ⚠ Member feed is a signed-in download, not a cookie-less subscription URL (a member-scoped
+      token feed could be added later if calendar-app subscription for staff is wanted).
 - [ ] 3.3 Messaging core: Message object, `ChannelAdapter` interface, templates with merge fields, delivery log
 - [ ] 3.4 Email adapter: SMTP (Mailpit) for dev, SES for prod behind same interface; bounce-webhook route (`hooks/ses-bounces.ts`) tested with simulated SNS payloads
 - [ ] 3.5 Job infrastructure: `Deno.cron` + `jobs`/`messages` tables, idempotency keys, retries with backoff, failure alerts via notification adapter + tests (incl. duplicate-send prevention)

@@ -16,6 +16,7 @@ import {
 import { audit } from "../audit/log.ts";
 import { getConfig } from "../config.ts";
 import { signToken, TokenError, verifyToken } from "../crypto/magic_link.ts";
+import type { IcsEvent } from "../calendar/ics.ts";
 import { type AuditCtx } from "./studies.ts";
 import { isTerminal } from "./enrollments.ts";
 
@@ -25,8 +26,12 @@ export type SessionStatus = StudySession["status"];
 
 /** Booking links live for 30 days — long enough to schedule ahead. */
 export const BOOKING_LINK_TTL_SECONDS = 30 * 24 * 60 * 60;
+/** Calendar subscription links live a year — they sit in a calendar app
+ * and are re-issued when they lapse. */
+export const CALENDAR_LINK_TTL_SECONDS = 365 * 24 * 60 * 60;
 
 const PURPOSE = "booking";
+const CALENDAR_PURPOSE = "calendar";
 
 export function bookingLinkFor(enrollment: Enrollment): string {
   const config = getConfig();
@@ -48,6 +53,71 @@ export function verifyBookingToken(token: string): string | null {
     if (err instanceof TokenError) return null;
     throw err;
   }
+}
+
+/** Subscribable .ics feed URL for an enrollment's own sessions. */
+export function calendarLinkFor(enrollment: Enrollment): string {
+  const config = getConfig();
+  const token = signToken(config.MAGIC_LINK_SECRET, {
+    purpose: CALENDAR_PURPOSE,
+    subject: enrollment.id,
+    ttlSeconds: CALENDAR_LINK_TTL_SECONDS,
+  });
+  return `${config.APP_URL}/p/${token}/calendar.ics`;
+}
+
+export function verifyCalendarToken(token: string): string | null {
+  try {
+    return verifyToken(getConfig().MAGIC_LINK_SECRET, token, {
+      purpose: CALENDAR_PURPOSE,
+    }).subject;
+  } catch (err) {
+    if (err instanceof TokenError) return null;
+    throw err;
+  }
+}
+
+/** Session lifecycle → iCalendar STATUS. Cancelled tells clients to drop
+ * the entry; everything else is a real (past or upcoming) appointment. */
+function icsStatus(status: SessionStatus): "confirmed" | "cancelled" {
+  return status === "cancelled" ? "cancelled" : "confirmed";
+}
+
+/** Map a participant's own sessions to calendar events (study name only —
+ * no PII). Open slots they have not booked are excluded. */
+export function enrollmentCalendarEvents(
+  study: Study,
+  sessions: StudySession[],
+): IcsEvent[] {
+  return sessions
+    .filter((s) => s.status !== "open")
+    .map((s) => ({
+      uid: `session-${s.id}@studyhub`,
+      start: s.startsAt,
+      end: s.endsAt,
+      summary: study.name,
+      location: s.location || undefined,
+      status: icsStatus(s.status),
+      sequence: Math.floor(s.updatedAt.getTime() / 1000),
+    }));
+}
+
+/** Map every session of a study to calendar events for a lab feed. Booked
+ * sessions carry the pseudonymous participant code; open slots show as
+ * availability. No PII. */
+export function studyCalendarEvents(rows: SessionRow[]): IcsEvent[] {
+  return rows.map(({ session, participantCode }) => ({
+    uid: `session-${session.id}@studyhub`,
+    start: session.startsAt,
+    end: session.endsAt,
+    summary: session.status === "open"
+      ? "Open slot"
+      : `${participantCode ?? "?"}${session.isPilot ? " (pilot)" : ""}`,
+    location: session.location || undefined,
+    description: `Status: ${session.status}`,
+    status: icsStatus(session.status),
+    sequence: Math.floor(session.updatedAt.getTime() / 1000),
+  }));
 }
 
 const TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
