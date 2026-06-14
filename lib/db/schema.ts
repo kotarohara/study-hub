@@ -598,6 +598,68 @@ export const studySessions = pgTable("study_sessions", {
 
 export type StudySession = typeof studySessions.$inferSelect;
 
+// Messages (spec §3.8): the delivery log for every outbound message —
+// session reminders, booking confirmations, diary prompts, recruitment
+// invites. Channel-agnostic (email/telegram/discord behind a
+// ChannelAdapter). The recipient address and the rendered subject/body
+// can contain PII (a participant's name or email), so they are encrypted
+// at rest like the rest of the PII surface; templateKey/status/channel
+// stay plaintext for the delivery log. `idempotencyKey` lets the job
+// runner (Phase 3.5) guarantee a message is enqueued at most once.
+export const messageChannel = pgEnum("message_channel", [
+  "email",
+  "telegram",
+  "discord",
+]);
+
+export type MessageChannel = (typeof messageChannel.enumValues)[number];
+
+export const messageStatus = pgEnum("message_status", [
+  "queued",
+  "sent",
+  "failed",
+  "skipped",
+]);
+
+export const messages = pgTable("messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  channel: messageChannel("channel").notNull(),
+  /** Which template produced this message (not PII). */
+  templateKey: text("template_key").notNull(),
+  /** PII: recipient address / chat id / webhook target (encrypted). */
+  recipient: encryptedText("recipient").notNull(),
+  /** PII: rendered subject (email only) and body (encrypted). */
+  subject: encryptedText("subject"),
+  body: encryptedText("body").notNull(),
+  status: messageStatus("status").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  /** Last delivery error (kept short; adapters must not put PII here). */
+  lastError: text("last_error"),
+  /** Provider's message id once accepted (for tracing / bounce matching). */
+  providerMessageId: text("provider_message_id"),
+  /** At-most-once enqueue key for the job runner (Phase 3.5). */
+  idempotencyKey: text("idempotency_key").unique(),
+  enrollmentId: uuid("enrollment_id").references(() => enrollments.id, {
+    onDelete: "set null",
+  }),
+  sessionId: uuid("session_id").references(() => studySessions.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("messages_status_idx").on(table.status),
+  index("messages_enrollment_idx").on(table.enrollmentId),
+  index("messages_session_idx").on(table.sessionId),
+]);
+
+export type Message = typeof messages.$inferSelect;
+
 // Consents (spec §4 kept-feature 1): a participant's signed agreement to
 // a specific APPROVED version of the study's consent Document. Amendments
 // (new approved versions) leave old rows intact and outdated — re-consent

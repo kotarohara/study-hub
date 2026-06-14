@@ -315,7 +315,19 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       link surfaced on the booking page; .ics download link on the Sessions tab.
       ⚠ Member feed is a signed-in download, not a cookie-less subscription URL (a member-scoped
       token feed could be added later if calendar-app subscription for staff is wanted).
-- [ ] 3.3 Messaging core: Message object, `ChannelAdapter` interface, templates with merge fields, delivery log
+- [x] 3.3 Messaging core: Message object, `ChannelAdapter` interface, templates with merge fields, delivery log
+      `messages` delivery-log table (migration 0017): channel/templateKey/status/attempts plaintext,
+      but recipient + subject + body encrypted at rest (they carry PII), `idempotencyKey` unique for
+      at-most-once enqueue. `ChannelAdapter` interface + registry in `lib/integrations/channel.ts`
+      (email/telegram/discord), with a no-network `FakeAdapter` for dev/tests; real adapters register
+      in 3.4/3.7/3.9. Message templates with merge fields in `lib/objects/message_templates.ts`
+      (reuses `renderTemplate`; a message must fully resolve — unfilled placeholder = error, never
+      literal "{{…}}" sent). `lib/objects/messaging.ts`: `enqueueMessage` (render→encrypt→log,
+      idempotent on key), `deliverMessage` (adapter send → status/attempts/providerId/error/sentAt,
+      idempotent once sent, clean failure when no adapter), `listMessagesOfEnrollment` (non-PII log
+      view). Pure template/adapter unit tests + integration test (encrypted-at-rest, idempotency,
+      success/failure/no-adapter, no-PII log). ⚠ Backend only — delivery-log UI + real sends land
+      with 3.6; the job runner that drives enqueue/deliver on a schedule is 3.5.
 - [ ] 3.4 Email adapter: SMTP (Mailpit) for dev, SES for prod behind same interface; bounce-webhook route (`hooks/ses-bounces.ts`) tested with simulated SNS payloads
 - [ ] 3.5 Job infrastructure: `Deno.cron` + `jobs`/`messages` tables, idempotency keys, retries with backoff, failure alerts via notification adapter + tests (incl. duplicate-send prevention)
 - [ ] 3.6 Session reminders + booking confirmations end-to-end (visible in Mailpit)
