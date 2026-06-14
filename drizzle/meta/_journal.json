@@ -127,6 +127,13 @@
       "when": 1781424362931,
       "tag": "0017_deep_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781455161372,
+      "tag": "0018_opposite_queen_noir",
+      "breakpoints": true
     }
   ]
 }

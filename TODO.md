@@ -328,7 +328,22 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       view). Pure template/adapter unit tests + integration test (encrypted-at-rest, idempotency,
       success/failure/no-adapter, no-PII log). ⚠ Backend only — delivery-log UI + real sends land
       with 3.6; the job runner that drives enqueue/deliver on a schedule is 3.5.
-- [ ] 3.4 Email adapter: SMTP (Mailpit) for dev, SES for prod behind same interface; bounce-webhook route (`hooks/ses-bounces.ts`) tested with simulated SNS payloads
+- [x] 3.4 Email adapter: SMTP (Mailpit) for dev, SES for prod behind same interface; bounce-webhook route (`hooks/ses-bounces.ts`) tested with simulated SNS payloads
+      Hand-rolled SMTP client (`lib/integrations/smtp.ts`, no node deps to keep the vite SSR
+      bundle clean): plain for Mailpit, STARTTLS+AUTH LOGIN when SMTP_USERNAME is set (SES).
+      `EmailAdapter` (`lib/integrations/email.ts`) builds an RFC 5322 base64 message (pure
+      `buildEmail` + MIME encoded-word subjects) and registers into the channel registry at
+      startup (main.ts) — same code path both backends. SES bounce webhook at
+      `routes/hooks/ses-bounces.ts` (added `/hooks/` to PUBLIC_PATHS; guarded by ?token= when
+      SES_WEBHOOK_TOKEN set): pure SNS parser (`lib/integrations/ses_bounce.ts`) handles
+      SubscriptionConfirmation + Notification, suppressing only PERMANENT bounces + complaints.
+      `suppressEmailChannels` matches addresses by blind index (no plaintext in query/audit),
+      flags the new `contact_channels.suppressed` column (migration 0018), audits with reason
+      only. Config: SMTP_USERNAME/PASSWORD, SES_WEBHOOK_TOKEN (all optional, empty in dev).
+      Tests: pure (buildEmail, SNS parser w/ simulated payloads), SMTP→Mailpit round-trip via
+      Mailpit API, suppression integration (blind-index match, per-channel, no-PII audit).
+      ⚠ STARTTLS+AUTH path is prod-only (not exercised by local Mailpit); suppressed channels
+      are recorded now, enforcement at send time wires in with reminders (3.6).
 - [ ] 3.5 Job infrastructure: `Deno.cron` + `jobs`/`messages` tables, idempotency keys, retries with backoff, failure alerts via notification adapter + tests (incl. duplicate-send prevention)
 - [ ] 3.6 Session reminders + booking confirmations end-to-end (visible in Mailpit)
 - [ ] 3.7 Telegram adapter: webhook route, pairing deep link (one-time token → verified ContactChannel), reminders, `/stop` → email fallback; tested with simulated Bot API payloads

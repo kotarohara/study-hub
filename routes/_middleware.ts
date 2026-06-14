@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   /^\/health$/,
   /^\/api\/dev\//, // dev-only routes guard themselves by APP_ENV
   /^\/p\//, // participant magic-link pages (Phase 2+)
+  /^\/hooks\//, // inbound provider webhooks (SES bounces); token-guarded
 ];
 
 const gate = requireMember("collaborator");

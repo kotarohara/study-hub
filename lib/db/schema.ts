@@ -376,6 +376,9 @@ export const contactChannels = pgTable("contact_channels", {
   valueIndex: text("value_index").notNull(),
   verified: boolean("verified").notNull().default(false),
   isPreferred: boolean("is_preferred").notNull().default(false),
+  /** Set when delivery hard-bounces or the recipient complains (spec §3.8
+   * bounce webhook); suppressed channels are skipped when sending. */
+  suppressed: boolean("suppressed").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

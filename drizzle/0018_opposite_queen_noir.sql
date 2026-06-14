@@ -1,0 +1,1 @@
+ALTER TABLE "contact_channels" ADD COLUMN "suppressed" boolean DEFAULT false NOT NULL;
