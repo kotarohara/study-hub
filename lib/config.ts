@@ -49,6 +49,9 @@ const ConfigSchema = z.object({
    * closed — public forms reject every submission until configured. */
   TURNSTILE_SITE_KEY: z.string().default(""),
   TURNSTILE_SECRET_KEY: z.string().default(""),
+  /** Runs the in-process job runner (message delivery cron). Off in dev
+   * by default; needs --unstable-cron. */
+  JOBS_ENABLED: z.stringbool().default(false),
   BACKUP_CRON_ENABLED: z.stringbool().default(false),
   BACKUP_CRON: z.string().default("0 18 * * *"), // 02:00 SGT
 });

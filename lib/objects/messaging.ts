@@ -23,6 +23,9 @@ export interface EnqueueOptions {
   /** Supplying this makes the enqueue at-most-once (returns the existing
    * row on a repeat instead of queuing a duplicate). */
   idempotencyKey?: string;
+  /** Hold delivery until this time (a scheduled reminder). Null/omitted =
+   * deliver on the next runner tick. */
+  nextAttemptAt?: Date;
 }
 
 export interface EnqueueResult {
@@ -53,6 +56,7 @@ export async function enqueueMessage(
         enrollmentId: opts.enrollmentId ?? null,
         sessionId: opts.sessionId ?? null,
         idempotencyKey: opts.idempotencyKey ?? null,
+        nextAttemptAt: opts.nextAttemptAt ?? null,
       })
       .returning();
     return { message, deduped: false };

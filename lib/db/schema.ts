@@ -642,6 +642,9 @@ export const messages = pgTable("messages", {
   providerMessageId: text("provider_message_id"),
   /** At-most-once enqueue key for the job runner (Phase 3.5). */
   idempotencyKey: text("idempotency_key").unique(),
+  /** When the runner may next attempt delivery: null = immediately, a
+   * future time = scheduled (a reminder) or backed-off after a failure. */
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
   enrollmentId: uuid("enrollment_id").references(() => enrollments.id, {
     onDelete: "set null",
   }),
@@ -662,6 +665,32 @@ export const messages = pgTable("messages", {
 ]);
 
 export type Message = typeof messages.$inferSelect;
+
+// Background jobs (spec §3.8, §6: Deno.cron + a jobs table, no external
+// queue). This is the idempotency ledger for scheduled work: a cron handler
+// claims a uniquely-keyed job ("reminders:2026-06-15T10:00Z") so a window
+// runs at most once even across restarts or a double-fired cron. Per-message
+// delivery retries live on the messages table; this tracks the run itself.
+export const jobStatus = pgEnum("job_status", ["running", "done", "failed"]);
+
+export const jobs = pgTable("jobs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Idempotency key — uniqueness is what makes a job run at most once. */
+  key: text("key").notNull().unique(),
+  /** Job family, e.g. "reminders", "backup" (not PII). */
+  kind: text("kind").notNull(),
+  status: jobStatus("status").notNull().default("running"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  startedAt: timestamp("started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+}, (table) => [
+  index("jobs_kind_idx").on(table.kind),
+]);
+
+export type Job = typeof jobs.$inferSelect;
 
 // Consents (spec §4 kept-feature 1): a participant's signed agreement to
 // a specific APPROVED version of the study's consent Document. Amendments

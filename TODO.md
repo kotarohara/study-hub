@@ -344,7 +344,21 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       Mailpit API, suppression integration (blind-index match, per-channel, no-PII audit).
       ⚠ STARTTLS+AUTH path is prod-only (not exercised by local Mailpit); suppressed channels
       are recorded now, enforcement at send time wires in with reminders (3.6).
-- [ ] 3.5 Job infrastructure: `Deno.cron` + `jobs`/`messages` tables, idempotency keys, retries with backoff, failure alerts via notification adapter + tests (incl. duplicate-send prevention)
+- [x] 3.5 Job infrastructure: `Deno.cron` + `jobs`/`messages` tables, idempotency keys, retries with backoff, failure alerts via notification adapter + tests (incl. duplicate-send prevention)
+      Message runner (`lib/jobs/message_runner.ts`) drains the queue: selects due messages
+      (queued, or failed with attempts<MAX and past backoff), delivers via the registered
+      adapter, applies exponential backoff (`backoffMs`: 1m→2m→4m… capped 1h, on the new
+      `messages.next_attempt_at` column), and fires a failure alert after MAX_ATTEMPTS (5).
+      Duplicate-send prevented two ways: enqueue idempotent on `idempotencyKey`, and
+      `deliverMessage` no-ops once `sent` (runner never selects `sent`). `nextAttemptAt` also
+      lets a message be enqueued for future delivery (scheduled reminders, 3.6). Generic `jobs`
+      table + `runJobOnce` (migration 0019): unique-key claim runs a scheduled window at most
+      once (for 3.6 reminder windows), recording status/attempts/error; a throwing job is logged
+      failed + alerted, never crashes the cron. Pluggable `AlertSink` (`lib/jobs/alerts.ts`,
+      console default; Discord wires in at 3.9). `registerMessageCron` (every minute, gated by
+      JOBS_ENABLED + --unstable-cron) in main.ts. Pure tests (backoff, alert routing) + integration
+      (deliver/retry-backoff/permanent-fail+alert, scheduled-hold, no re-send; runJobOnce once +
+      skip-on-repeat + failure alert).
 - [ ] 3.6 Session reminders + booking confirmations end-to-end (visible in Mailpit)
 - [ ] 3.7 Telegram adapter: webhook route, pairing deep link (one-time token → verified ContactChannel), reminders, `/stop` → email fallback; tested with simulated Bot API payloads
 - [ ] 3.8 Diary/ESM engine: schedule builder (fixed/interval/randomized windows), prompt dispatch, diary entry pages via magic link, optional quick replies
