@@ -46,7 +46,12 @@ import {
   type SessionRow,
 } from "../../../lib/objects/sessions.ts";
 import { isTerminal } from "../../../lib/objects/enrollments.ts";
+import {
+  listMessagesOfStudy,
+  type StudyMessageLogRow,
+} from "../../../lib/objects/messaging.ts";
 import { SessionPanel } from "../../../components/SessionPanel.tsx";
+import { MessageLog } from "../../../components/MessageLog.tsx";
 import { audit } from "../../../lib/audit/log.ts";
 import { clientHost } from "../../../lib/auth/limiters.ts";
 import { Layout } from "../../../components/Layout.tsx";
@@ -72,6 +77,7 @@ interface Data {
   funnel: StudyFunnel | null;
   sessions: SessionRow[];
   bookable: { id: string; code: string }[];
+  messages: StudyMessageLogRow[];
 }
 
 const TABS = [
@@ -143,6 +149,9 @@ export const handler = define.handlers({
         ? (await listEnrollmentsOfStudy(getDb(), found.study.id))
           .filter((r) => !isTerminal(r.enrollment.status))
           .map((r) => ({ id: r.enrollment.id, code: r.participantCode }))
+        : [],
+      messages: activeTab === "sessions"
+        ? await listMessagesOfStudy(getDb(), found.study.id)
         : [],
     });
   },
@@ -465,13 +474,16 @@ export default define.page<typeof handler>(({ data, state, url }) => {
           />
         )}
         {data.activeTab === "sessions" && (
-          <SessionPanel
-            study={study}
-            rows={data.sessions}
-            bookable={data.bookable}
-            canOperate={hasRole(me.role, "assistant")}
-            canManage={hasRole(me.role, "researcher")}
-          />
+          <div class="space-y-6">
+            <SessionPanel
+              study={study}
+              rows={data.sessions}
+              bookable={data.bookable}
+              canOperate={hasRole(me.role, "assistant")}
+              canManage={hasRole(me.role, "researcher")}
+            />
+            <MessageLog rows={data.messages} />
+          </div>
         )}
         {data.activeTab === "timeline" && (
           <div class="space-y-4">

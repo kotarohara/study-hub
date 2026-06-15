@@ -5,7 +5,13 @@
 // at-most-once enqueue keyed by idempotencyKey.
 import { desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client.ts";
-import { type Message, type MessageChannel, messages } from "../db/schema.ts";
+import {
+  enrollments,
+  type Message,
+  type MessageChannel,
+  messages,
+  participants,
+} from "../db/schema.ts";
 import { errorChainIncludes } from "../db/errors.ts";
 import { type ChannelAdapter, getAdapter } from "../integrations/channel.ts";
 import { renderMessage } from "./message_templates.ts";
@@ -159,6 +165,27 @@ export async function listMessagesOfEnrollment(
     .select(LOG_COLUMNS)
     .from(messages)
     .where(eq(messages.enrollmentId, enrollmentId))
+    .orderBy(desc(messages.createdAt));
+}
+
+/** A study's delivery-log row: pseudonymous (participant code only, never
+ * PII) for the study Sessions tab. */
+export interface StudyMessageLogRow extends MessageLogRow {
+  participantCode: string;
+}
+
+/** Lists messages for a study via its enrollments, newest first. Joins to
+ * the participant only for the pseudonymous code — no PII columns. */
+export async function listMessagesOfStudy(
+  db: Db,
+  studyId: string,
+): Promise<StudyMessageLogRow[]> {
+  return await db
+    .select({ ...LOG_COLUMNS, participantCode: participants.code })
+    .from(messages)
+    .innerJoin(enrollments, eq(messages.enrollmentId, enrollments.id))
+    .innerJoin(participants, eq(enrollments.participantId, participants.id))
+    .where(eq(enrollments.studyId, studyId))
     .orderBy(desc(messages.createdAt));
 }
 

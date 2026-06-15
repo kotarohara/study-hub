@@ -56,6 +56,10 @@ const TONES: Record<string, StatusTone> = {
   booked: "info",
   no_show: "danger",
   cancelled: "neutral",
+  // Message delivery (spec §3.8); "failed"/"sent" are message-specific here
+  queued: "neutral",
+  sent: "success",
+  failed: "danger",
   // Consent status per enrollment (spec §4 kept-feature 1)
   consent_current: "success",
   consent_outdated: "warning",

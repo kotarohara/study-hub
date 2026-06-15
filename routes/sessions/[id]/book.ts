@@ -6,6 +6,7 @@ import { hasRole } from "../../../lib/auth/roles.ts";
 import { clientHost } from "../../../lib/auth/limiters.ts";
 import { getEnrollment } from "../../../lib/objects/enrollments.ts";
 import { bookSession, SessionError } from "../../../lib/objects/sessions.ts";
+import { notifyBookingConfirmed } from "../../../lib/objects/notifications.ts";
 import { getSessionFor, sessionHome } from "./_shared.ts";
 
 export const handler = define.handlers({
@@ -24,8 +25,9 @@ export const handler = define.handlers({
     if (!enrollment || enrollment.studyId !== found.study.id) {
       throw new HttpError(400);
     }
+    let booked;
     try {
-      await bookSession(db, {
+      booked = await bookSession(db, {
         session: found.session,
         enrollment,
         actor: me,
@@ -36,6 +38,7 @@ export const handler = define.handlers({
       if (err instanceof SessionError) throw new HttpError(409, err.message);
       throw err;
     }
+    await notifyBookingConfirmed(db, booked.id);
     return ctx.redirect(sessionHome(found.session), 303);
   },
 });

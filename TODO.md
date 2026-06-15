@@ -359,7 +359,14 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       JOBS_ENABLED + --unstable-cron) in main.ts. Pure tests (backoff, alert routing) + integration
       (deliver/retry-backoff/permanent-fail+alert, scheduled-hold, no re-send; runJobOnce once +
       skip-on-repeat + failure alert).
-- [ ] 3.6 Session reminders + booking confirmations end-to-end (visible in Mailpit)
+- [x] 3.6 Session reminders + booking confirmations end-to-end (visible in Mailpit) — `lib/objects/notifications.ts`:
+      `notifyBookingConfirmed` (called after booking on both the lab route `sessions/[id]/book.ts` and the
+      participant self-book/reschedule route `p/[token]/book.tsx`) and `sweepDueReminders` (a periodic sweep
+      reading live session state — reschedules/cancellations are handled for free, idempotent per session via
+      `confirm:`/`reminder:` keys). Both enforce the compliance gates deferred from 3.1/3.4: do-not-contact and
+      bounce-suppressed channels are skipped. The message cron (3.5) sweeps reminders then drains the queue each
+      minute. Study Sessions tab gains a pseudonymous "Message log" (`components/MessageLog.tsx` + `listMessagesOfStudy`
+      — participant code only, no PII). End-to-end test proves a confirmation lands in Mailpit via the real EmailAdapter.
 - [ ] 3.7 Telegram adapter: webhook route, pairing deep link (one-time token → verified ContactChannel), reminders, `/stop` → email fallback; tested with simulated Bot API payloads
 - [ ] 3.8 Diary/ESM engine: schedule builder (fixed/interval/randomized windows), prompt dispatch, diary entry pages via magic link, optional quick replies
 - [ ] 3.9 Discord webhook adapter (internal events; pseudonymous IDs only — assert no PII in payloads via test)
