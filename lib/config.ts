@@ -26,6 +26,13 @@ const ConfigSchema = z.object({
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535),
   MAIL_FROM: z.string().min(1),
+  // SMTP auth (SES in production; Mailpit needs none). When a username is
+  // set the email adapter uses STARTTLS + AUTH LOGIN.
+  SMTP_USERNAME: z.string().default(""),
+  SMTP_PASSWORD: z.string().default(""),
+  // Shared secret guarding the SES bounce webhook (matched against the
+  // ?token= query). Empty disables the check (dev only).
+  SES_WEBHOOK_TOKEN: z.string().default(""),
   // Comma-separated `<version>:<base64 32-byte key>` pairs; highest version
   // encrypts, all versions decrypt (see lib/crypto/encryption.ts).
   PII_ENCRYPTION_KEYS: z.string().regex(

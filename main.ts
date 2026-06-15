@@ -4,8 +4,14 @@ import { getConfig } from "./lib/config.ts";
 import { registerBackupCron } from "./lib/jobs/backup_cron.ts";
 import { sessionMiddleware } from "./lib/auth/middleware.ts";
 import { AUDIT_RULES, createAuditMiddleware } from "./lib/audit/middleware.ts";
+import { registerAdapter } from "./lib/integrations/channel.ts";
+import { EmailAdapter } from "./lib/integrations/email.ts";
 
 registerBackupCron(getConfig());
+// Outbound channels (spec §6). Email runs on both backends from one
+// config (Mailpit in dev / SES in production); Telegram and Discord
+// register in later phases.
+registerAdapter(new EmailAdapter(getConfig()));
 
 export const app = new App<State>();
 

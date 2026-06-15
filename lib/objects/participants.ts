@@ -331,3 +331,55 @@ export async function channelCounts(
   }
   return counts;
 }
+
+/**
+ * Suppresses email contact channels whose address hard-bounced or
+ * complained (spec §3.8 bounce webhook). Matched by blind index, so the
+ * plaintext address never appears in the query or the audit trail. Each
+ * affected channel is flagged `suppressed` so later sends skip it.
+ * Participant-initiated (no member actor). Returns the count suppressed.
+ */
+export async function suppressEmailChannels(
+  db: Db,
+  emails: string[],
+  opts: { reason: "bounce" | "complaint" } & AuditCtx,
+): Promise<number> {
+  const cleaned = emails.map((e) => e.trim()).filter((e) => e.includes("@"));
+  if (cleaned.length === 0) return 0;
+  const secret = getConfig().PII_INDEX_SECRET;
+  const indexes = cleaned.map((e) => channelIndex(secret, "email", e));
+
+  const rows = await db
+    .select({
+      id: contactChannels.id,
+      participantId: contactChannels.participantId,
+    })
+    .from(contactChannels)
+    .where(
+      and(
+        eq(contactChannels.kind, "email"),
+        inArray(contactChannels.valueIndex, indexes),
+        eq(contactChannels.suppressed, false),
+      ),
+    );
+  if (rows.length === 0) return 0;
+
+  await db
+    .update(contactChannels)
+    .set({ suppressed: true })
+    .where(inArray(contactChannels.id, rows.map((r) => r.id)));
+
+  for (const row of rows) {
+    await audit(db, {
+      action: "channel.suppressed",
+      actorId: null,
+      objectType: "participant",
+      objectId: row.participantId,
+      // No PII — reason only; the address is identified by blind index.
+      details: { reason: opts.reason, kind: "email" },
+      requestId: opts.requestId,
+      ip: opts.ip,
+    });
+  }
+  return rows.length;
+}

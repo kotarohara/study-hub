@@ -291,10 +291,59 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 3 — Sessions, Reminders & Comms *(first usable release)*
 
-- [ ] 3.1 Session scheduling: slot publishing, self-booking via magic link, reschedule/no-show tracking
-- [ ] 3.2 ICS feed generation + tests
-- [ ] 3.3 Messaging core: Message object, `ChannelAdapter` interface, templates with merge fields, delivery log
-- [ ] 3.4 Email adapter: SMTP (Mailpit) for dev, SES for prod behind same interface; bounce-webhook route (`hooks/ses-bounces.ts`) tested with simulated SNS payloads
+- [x] 3.1 Session scheduling: slot publishing, self-booking via magic link, reschedule/no-show tracking
+      `study_sessions` table (domain "Session"; distinct from the auth `sessions` table) with
+      lifecycle open → booked → completed/no_show/cancelled (+ booked→open on unbook). Study
+      "Sessions" tab (researcher+ publishes slots; assistant+ books on behalf, marks
+      completed/no-show, unbooks; researcher+ cancels). Self-booking page `p/[token]/book` via
+      purpose-scoped "booking" magic link (30-day TTL, rate-limited, no Turnstile): participant
+      books an open slot or moves their booking (atomic `rescheduleBooking`), or cancels.
+      Booking is an atomic claim (re-checks status=open under the update) so two participants
+      can't grab one slot; pilot flag inherited from the enrollment. Booking-link issuance
+      (`/enrollments/[id]/booking-link`, assistant+, audited). All session events audited with
+      the pseudonymous code only. datetime-local inputs interpreted in server tz (ap-southeast-1).
+      ⚠ Single active booking per enrollment in the self-book UI (multi-session studies book
+      lab-side); ICS feeds are 3.2; automated link delivery is 3.6.
+- [x] 3.2 ICS feed generation + tests
+      Pure RFC 5545 builder in `lib/calendar/ics.ts` (UTC times, TEXT escaping, 75-octet line
+      folding, CRLF) — fully unit-tested. Two feeds, both pseudonymous (no PII): participant
+      subscribable feed `p/[token]/calendar.ics` behind a long-lived (1yr) purpose-scoped
+      "calendar" magic link (calendar apps poll cookie-less, so the token is the capability;
+      excludes open slots, summary = study name); study feed `studies/[id]/calendar.ics`
+      (member-gated download — every session, open slots labelled, booked rows show the
+      pseudonymous code, cancelled → STATUS:CANCELLED, SEQUENCE bumps on reschedule). Subscribe
+      link surfaced on the booking page; .ics download link on the Sessions tab.
+      ⚠ Member feed is a signed-in download, not a cookie-less subscription URL (a member-scoped
+      token feed could be added later if calendar-app subscription for staff is wanted).
+- [x] 3.3 Messaging core: Message object, `ChannelAdapter` interface, templates with merge fields, delivery log
+      `messages` delivery-log table (migration 0017): channel/templateKey/status/attempts plaintext,
+      but recipient + subject + body encrypted at rest (they carry PII), `idempotencyKey` unique for
+      at-most-once enqueue. `ChannelAdapter` interface + registry in `lib/integrations/channel.ts`
+      (email/telegram/discord), with a no-network `FakeAdapter` for dev/tests; real adapters register
+      in 3.4/3.7/3.9. Message templates with merge fields in `lib/objects/message_templates.ts`
+      (reuses `renderTemplate`; a message must fully resolve — unfilled placeholder = error, never
+      literal "{{…}}" sent). `lib/objects/messaging.ts`: `enqueueMessage` (render→encrypt→log,
+      idempotent on key), `deliverMessage` (adapter send → status/attempts/providerId/error/sentAt,
+      idempotent once sent, clean failure when no adapter), `listMessagesOfEnrollment` (non-PII log
+      view). Pure template/adapter unit tests + integration test (encrypted-at-rest, idempotency,
+      success/failure/no-adapter, no-PII log). ⚠ Backend only — delivery-log UI + real sends land
+      with 3.6; the job runner that drives enqueue/deliver on a schedule is 3.5.
+- [x] 3.4 Email adapter: SMTP (Mailpit) for dev, SES for prod behind same interface; bounce-webhook route (`hooks/ses-bounces.ts`) tested with simulated SNS payloads
+      Hand-rolled SMTP client (`lib/integrations/smtp.ts`, no node deps to keep the vite SSR
+      bundle clean): plain for Mailpit, STARTTLS+AUTH LOGIN when SMTP_USERNAME is set (SES).
+      `EmailAdapter` (`lib/integrations/email.ts`) builds an RFC 5322 base64 message (pure
+      `buildEmail` + MIME encoded-word subjects) and registers into the channel registry at
+      startup (main.ts) — same code path both backends. SES bounce webhook at
+      `routes/hooks/ses-bounces.ts` (added `/hooks/` to PUBLIC_PATHS; guarded by ?token= when
+      SES_WEBHOOK_TOKEN set): pure SNS parser (`lib/integrations/ses_bounce.ts`) handles
+      SubscriptionConfirmation + Notification, suppressing only PERMANENT bounces + complaints.
+      `suppressEmailChannels` matches addresses by blind index (no plaintext in query/audit),
+      flags the new `contact_channels.suppressed` column (migration 0018), audits with reason
+      only. Config: SMTP_USERNAME/PASSWORD, SES_WEBHOOK_TOKEN (all optional, empty in dev).
+      Tests: pure (buildEmail, SNS parser w/ simulated payloads), SMTP→Mailpit round-trip via
+      Mailpit API, suppression integration (blind-index match, per-channel, no-PII audit).
+      ⚠ STARTTLS+AUTH path is prod-only (not exercised by local Mailpit); suppressed channels
+      are recorded now, enforcement at send time wires in with reminders (3.6).
 - [ ] 3.5 Job infrastructure: `Deno.cron` + `jobs`/`messages` tables, idempotency keys, retries with backoff, failure alerts via notification adapter + tests (incl. duplicate-send prevention)
 - [ ] 3.6 Session reminders + booking confirmations end-to-end (visible in Mailpit)
 - [ ] 3.7 Telegram adapter: webhook route, pairing deep link (one-time token → verified ContactChannel), reminders, `/stop` → email fallback; tested with simulated Bot API payloads
