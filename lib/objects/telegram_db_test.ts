@@ -157,7 +157,7 @@ Deno.test("handleTelegramUpdate: bad/empty start and /stop and noise", async () 
 
     // /stop suppresses and confirms.
     const stop = await handleTelegramUpdate(db, update("/stop"), {});
-    assert.match(stop.reply ?? "", /email instead/i);
+    assert.match(stop.reply ?? "", /email you instead/i);
     const tg = (await listChannels(db, participant.id))
       .filter((c) => c.kind === "telegram");
     assert.equal(tg[0].suppressed, true);
