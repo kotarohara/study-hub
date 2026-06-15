@@ -367,7 +367,20 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       bounce-suppressed channels are skipped. The message cron (3.5) sweeps reminders then drains the queue each
       minute. Study Sessions tab gains a pseudonymous "Message log" (`components/MessageLog.tsx` + `listMessagesOfStudy`
       — participant code only, no PII). End-to-end test proves a confirmation lands in Mailpit via the real EmailAdapter.
-- [ ] 3.7 Telegram adapter: webhook route, pairing deep link (one-time token → verified ContactChannel), reminders, `/stop` → email fallback; tested with simulated Bot API payloads
+- [x] 3.7 Telegram adapter: webhook route, pairing deep link (one-time token → verified ContactChannel), reminders, `/stop` → email fallback; tested with simulated Bot API payloads —
+      `lib/integrations/telegram.ts` (`TelegramAdapter` over an injectable transport so the Bot API is testable
+      without network; `pairingDeepLink`, `toSendResult`), `lib/integrations/telegram_update.ts` (pure `parseUpdate`
+      of Bot API updates → `/start <token>` / `/stop` / other / ignore), and `lib/objects/telegram.ts` (pairing
+      domain: `telegramPairingToken`/`telegramDeepLink` (purpose `telegram_pair`, 7-day TTL), `pairTelegram`
+      (one-time token → verified, un-suppressed telegram ContactChannel; idempotent re-pair), `stopTelegram`
+      (suppress by blind index → email fallback), and `handleTelegramUpdate` orchestrating the webhook reply).
+      Webhook at `routes/hooks/telegram.ts` (secret-header guarded, thin shell, always 200); researcher pairing-link
+      page at `routes/participants/[id]/telegram-link.tsx` surfaced from the participant Channels tab. Notification
+      resolution generalized: `resolveContact` prefers a verified Telegram chat over email (skip reason now
+      `no_channel`), and the message runner delivers via the channel's registered adapter. Config gains
+      `TELEGRAM_BOT_TOKEN`/`_USERNAME`/`_WEBHOOK_SECRET` (empty token = Telegram disabled; adapter registered in
+      `main.ts` only when set). Tests: adapter/parser/deep-link units with simulated payloads; pairing/stop/webhook
+      integration; and a notification channel-preference test (Telegram chosen, `/stop` falls back to email).
 - [ ] 3.8 Diary/ESM engine: schedule builder (fixed/interval/randomized windows), prompt dispatch, diary entry pages via magic link, optional quick replies
 - [ ] 3.9 Discord webhook adapter (internal events; pseudonymous IDs only — assert no PII in payloads via test)
 

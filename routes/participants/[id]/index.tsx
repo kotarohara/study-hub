@@ -259,6 +259,18 @@ export default define.page<typeof handler>(({ data, state, url }) => {
                 </button>
               </form>
             )}
+
+            {canManage && (
+              <p class="text-sm text-gray-600">
+                Connect Telegram for reminders:{" "}
+                <a
+                  href={`/participants/${participant.id}/telegram-link`}
+                  class="text-brand-700 hover:underline"
+                >
+                  get a pairing link →
+                </a>
+              </p>
+            )}
           </div>
         )}
 

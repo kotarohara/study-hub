@@ -1,15 +1,16 @@
 // Automated participant comms (spec §3.8, §4 kept-feature 2): booking
-// confirmations and session reminders. These resolve the participant's
-// email channel, enforce the compliance gates deferred from earlier phases
-// (do-not-contact, bounce-suppressed channels), and enqueue an idempotent
-// message — the job runner (3.5) delivers it. No PII leaves here in the
-// clear: the body is encrypted by the messaging core, audit isn't touched
-// (the messages table is the delivery log).
+// confirmations and session reminders. These resolve the participant's best
+// reachable channel, enforce the compliance gates deferred from earlier
+// phases (do-not-contact, bounce-suppressed channels), and enqueue an
+// idempotent message — the job runner (3.5) delivers it via the channel's
+// adapter. No PII leaves here in the clear: the body is encrypted by the
+// messaging core (the messages table is the delivery log).
 import { and, asc, eq, gt, lte } from "drizzle-orm";
 import type { Db } from "../db/client.ts";
 import {
   contactChannels,
   enrollments,
+  type MessageChannel,
   participants,
   type Study,
   type StudySession,
@@ -24,18 +25,24 @@ export const REMINDER_LEAD_MS = 24 * 60 * 60 * 1000;
 
 export interface NotifyResult {
   enqueued: boolean;
-  /** Why nothing was sent: "not_booked" | "do_not_contact" | "no_email". */
+  /** Why nothing was sent: "not_booked" | "do_not_contact" | "no_channel". */
   reason?: string;
 }
 
 interface Recipient {
-  email: string;
+  channel: MessageChannel;
+  to: string;
   firstName: string;
 }
 
-/** Resolves a reachable email recipient for an enrollment, or a skip
- * reason. Honors do-not-contact and bounce suppression. */
-async function resolveEmail(
+/**
+ * Resolves the best reachable channel for an enrollment, or a skip reason.
+ * Honors do-not-contact and suppression (bounce, or a Telegram `/stop`).
+ * A *verified* Telegram chat wins over email — pairing is an explicit
+ * "reach me here" — and `/stop` suppresses it back to the email fallback.
+ * Within a kind the preferred address is used, else the first usable one.
+ */
+async function resolveContact(
   db: Db,
   enrollmentId: string,
 ): Promise<Recipient | { skip: string }> {
@@ -57,15 +64,24 @@ async function resolveEmail(
     .where(
       and(
         eq(contactChannels.participantId, row.participantId),
-        eq(contactChannels.kind, "email"),
         eq(contactChannels.suppressed, false),
       ),
     );
-  if (channels.length === 0) return { skip: "no_email" };
-  // Prefer the flagged channel, else the first usable one.
-  const chosen = channels.find((c) => c.isPreferred) ?? channels[0];
+
   const firstName = row.name.trim().split(/\s+/)[0] || row.name;
-  return { email: chosen.value, firstName };
+  const pick = (kind: MessageChannel) => {
+    const matches = channels.filter((c) =>
+      c.kind === kind && (kind !== "telegram" || c.verified)
+    );
+    if (matches.length === 0) return null;
+    return matches.find((c) => c.isPreferred) ?? matches[0];
+  };
+
+  const telegram = pick("telegram");
+  if (telegram) return { channel: "telegram", to: telegram.value, firstName };
+  const email = pick("email");
+  if (email) return { channel: "email", to: email.value, firstName };
+  return { skip: "no_channel" };
 }
 
 function fmtTime(date: Date): string {
@@ -98,12 +114,12 @@ export async function notifyBookingConfirmed(
   const study = await getStudy(db, session.studyId);
   if (!study) return { enqueued: false, reason: "not_booked" };
 
-  const recipient = await resolveEmail(db, session.enrollmentId);
+  const recipient = await resolveContact(db, session.enrollmentId);
   if ("skip" in recipient) return { enqueued: false, reason: recipient.skip };
 
   await enqueueMessage(db, {
-    channel: "email",
-    to: recipient.email,
+    channel: recipient.channel,
+    to: recipient.to,
     templateKey: "booking_confirmation",
     fields: sessionFields(recipient, study, session),
     enrollmentId: session.enrollmentId,
@@ -152,7 +168,7 @@ export async function sweepDueReminders(
       result.skipped++;
       continue;
     }
-    const recipient = await resolveEmail(db, session.enrollmentId);
+    const recipient = await resolveContact(db, session.enrollmentId);
     if ("skip" in recipient) {
       result.skipped++;
       continue;
@@ -166,8 +182,8 @@ export async function sweepDueReminders(
       continue;
     }
     const { deduped } = await enqueueMessage(db, {
-      channel: "email",
-      to: recipient.email,
+      channel: recipient.channel,
+      to: recipient.to,
       templateKey: "session_reminder",
       fields: sessionFields(recipient, study, session),
       enrollmentId: session.enrollmentId,

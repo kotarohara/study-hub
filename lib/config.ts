@@ -33,6 +33,13 @@ const ConfigSchema = z.object({
   // Shared secret guarding the SES bounce webhook (matched against the
   // ?token= query). Empty disables the check (dev only).
   SES_WEBHOOK_TOKEN: z.string().default(""),
+  // Telegram Bot API (spec §3.8, §6). Empty token = Telegram disabled (no
+  // adapter registered; dev runs on email only). The username builds the
+  // t.me pairing deep link. The webhook secret is matched against Telegram's
+  // X-Telegram-Bot-Api-Secret-Token header; empty disables the check.
+  TELEGRAM_BOT_TOKEN: z.string().default(""),
+  TELEGRAM_BOT_USERNAME: z.string().default(""),
+  TELEGRAM_WEBHOOK_SECRET: z.string().default(""),
   // Comma-separated `<version>:<base64 32-byte key>` pairs; highest version
   // encrypts, all versions decrypt (see lib/crypto/encryption.ts).
   PII_ENCRYPTION_KEYS: z.string().regex(

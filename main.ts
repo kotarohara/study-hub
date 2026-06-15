@@ -7,13 +7,20 @@ import { sessionMiddleware } from "./lib/auth/middleware.ts";
 import { AUDIT_RULES, createAuditMiddleware } from "./lib/audit/middleware.ts";
 import { registerAdapter } from "./lib/integrations/channel.ts";
 import { EmailAdapter } from "./lib/integrations/email.ts";
+import { TelegramAdapter } from "./lib/integrations/telegram.ts";
 
 registerBackupCron(getConfig());
 registerMessageCron(getConfig());
 // Outbound channels (spec §6). Email runs on both backends from one
-// config (Mailpit in dev / SES in production); Telegram and Discord
-// register in later phases.
+// config (Mailpit in dev / SES in production). Telegram registers only when
+// a bot token is configured — otherwise the lab runs on email alone and no
+// telegram channel is ever paired. Discord registers in 3.9.
 registerAdapter(new EmailAdapter(getConfig()));
+if (getConfig().TELEGRAM_BOT_TOKEN) {
+  registerAdapter(
+    new TelegramAdapter({ botToken: getConfig().TELEGRAM_BOT_TOKEN }),
+  );
+}
 
 export const app = new App<State>();
 

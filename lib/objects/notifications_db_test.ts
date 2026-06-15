@@ -24,6 +24,11 @@ import { createEnrollment } from "./enrollments.ts";
 import { bookSession, cancelBooking, publishSlot } from "./sessions.ts";
 import { listMessagesOfStudy, type StudyMessageLogRow } from "./messaging.ts";
 import { notifyBookingConfirmed, sweepDueReminders } from "./notifications.ts";
+import {
+  pairTelegram,
+  stopTelegram,
+  telegramPairingToken,
+} from "./telegram.ts";
 import { runDueMessages } from "../jobs/message_runner.ts";
 import { EmailAdapter } from "../integrations/email.ts";
 
@@ -174,7 +179,7 @@ Deno.test("booking confirmation: skips a participant with no email channel", asy
     const session = await bookSlot(env, 48 * HOUR);
     const result = await notifyBookingConfirmed(db, session.id);
     assert.equal(result.enqueued, false);
-    assert.equal(result.reason, "no_email");
+    assert.equal(result.reason, "no_channel");
   }, { email: null });
 });
 
@@ -189,7 +194,7 @@ Deno.test("booking confirmation: skips a suppressed (bounced) email channel", as
     const session = await bookSlot(env, 48 * HOUR);
     const result = await notifyBookingConfirmed(db, session.id);
     assert.equal(result.enqueued, false);
-    assert.equal(result.reason, "no_email");
+    assert.equal(result.reason, "no_channel");
   });
 });
 
@@ -263,6 +268,39 @@ Deno.test("study message log is pseudonymous (participant code, no PII)", async 
     assert.ok(!("recipient" in log[0]));
     assert.ok(!("body" in log[0]));
     assert.ok(!("subject" in log[0]));
+  });
+});
+
+Deno.test("channel choice: a verified Telegram chat wins; /stop falls back to email", async () => {
+  await withEnv(async (env) => {
+    const db = await getTestDb();
+    await pairTelegram(db, {
+      token: telegramPairingToken(env.participant),
+      chatId: "880",
+    });
+
+    // With Telegram paired, the confirmation goes to Telegram.
+    const s1 = await bookSlot(env, 48 * HOUR);
+    await notifyBookingConfirmed(db, s1.id);
+    const m1 = await db
+      .select({ channel: messages.channel, recipient: messages.recipient })
+      .from(messages)
+      .where(eq(messages.sessionId, s1.id));
+    assert.equal(m1.length, 1);
+    assert.equal(m1[0].channel, "telegram");
+    assert.equal(m1[0].recipient, "880");
+
+    // After /stop, a fresh booking falls back to the email channel.
+    await stopTelegram(db, { chatId: "880" });
+    const s2 = await bookSlot(env, 49 * HOUR);
+    await notifyBookingConfirmed(db, s2.id);
+    const m2 = await db
+      .select({ channel: messages.channel, recipient: messages.recipient })
+      .from(messages)
+      .where(eq(messages.sessionId, s2.id));
+    assert.equal(m2.length, 1);
+    assert.equal(m2[0].channel, "email");
+    assert.equal(m2[0].recipient, "ada@example.com");
   });
 });
 
