@@ -396,7 +396,19 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       (`components/DiaryPanel.tsx`) configures the schedule, generates prompts, and shows pseudonymous per-participant
       progress; cron wired in `message_cron.ts`. Tests: pure builder/parser units + integration (configure, generate
       idempotency, dispatch-once/expire/unreachable, submit validation/closed/re-submit, progress, end-to-end delivery).
-- [ ] 3.9 Discord webhook adapter (internal events; pseudonymous IDs only — assert no PII in payloads via test)
+- [x] 3.9 Discord webhook adapter (internal events; pseudonymous IDs only — assert no PII in payloads via test) —
+      `lib/integrations/discord.ts`: outbound webhook POSTs to a lab channel (no bot/gateway/slash commands, all cut
+      per spec §5.4) over an injectable transport (fake-testable, no network). Two roles: (1) a real **AlertSink**
+      (`discordAlertSink`) wired in `main.ts` so background-job / backup / message-delivery failures ping Discord
+      when `DISCORD_WEBHOOK_URL` is set (else they stay on the console); (2) `notifyDiscordEvent` for lab events —
+      a `DiscordEvent` union (enrollment eligible, session booked/cancelled/no-show, milestone due, IRB expiring,
+      payment pending) that **by construction carries only pseudonymous codes + internal study names — no field
+      for a name/email/phone/chat id**. Fire-and-forget, no-op when unconfigured, never throws. Wired into
+      `screeners.submitScreener` (new eligible participant) and `sessions.ts` (booked/cancelled/no-show), guarded by
+      `discordConfigured()` so there's zero cost when off. Config gains `DISCORD_WEBHOOK_URL`. Tests
+      (`discord_test.ts`): the **no-PII invariant** (every event kind serialized, asserting participant
+      name/email/phone/Telegram handle never appear), formatter output, transport success/non-2xx/throw handling,
+      and the alert sink. **Phase 3 (first usable release + comms) complete.**
 
 ## Phase 4 — Data & Compensation
 

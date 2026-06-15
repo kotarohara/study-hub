@@ -17,7 +17,30 @@ import { audit } from "../audit/log.ts";
 import { getConfig } from "../config.ts";
 import { signToken, TokenError, verifyToken } from "../crypto/magic_link.ts";
 import type { IcsEvent } from "../calendar/ics.ts";
-import { type AuditCtx } from "./studies.ts";
+import {
+  discordConfigured,
+  notifyDiscordEvent,
+} from "../integrations/discord.ts";
+import { type AuditCtx, getStudy } from "./studies.ts";
+
+/** Fire-and-forget internal Discord ping for a session lifecycle change
+ * (spec §5.4). Pseudonymous: study name + participant code only. Resolves the
+ * study name only when Discord is configured. */
+async function pingSessionEvent(
+  db: Db,
+  session: StudySession,
+  code: string,
+  kind: "session_booked" | "session_cancelled" | "session_no_show",
+): Promise<void> {
+  if (!discordConfigured()) return;
+  const study = await getStudy(db, session.studyId);
+  void notifyDiscordEvent({
+    kind,
+    study: study?.name ?? "study",
+    code,
+    at: session.startsAt,
+  });
+}
 import { isTerminal } from "./enrollments.ts";
 
 export class SessionError extends Error {}
@@ -237,10 +260,10 @@ export async function bookSession(
   }
   const code = await participantCode(db, opts.enrollment.id);
 
-  return await db.transaction(async (tx) => {
+  const claimed = await db.transaction(async (tx) => {
     // Re-read under the row's current state to avoid double-booking a slot
     // two participants opened at once.
-    const [claimed] = await tx
+    const [booked] = await tx
       .update(studySessions)
       .set({
         status: "booked",
@@ -255,20 +278,22 @@ export async function bookSession(
         ),
       )
       .returning();
-    if (!claimed) {
+    if (!booked) {
       throw new SessionError("This slot was just taken — pick another.");
     }
     await audit(tx, {
       action: "session.booked",
       actorId: opts.actor?.id ?? null,
       objectType: "session",
-      objectId: claimed.id,
-      details: { code, studyId: claimed.studyId },
+      objectId: booked.id,
+      details: { code, studyId: booked.studyId },
       requestId: opts.requestId,
       ip: opts.ip,
     });
-    return claimed;
+    return booked;
   });
+  await pingSessionEvent(db, claimed, code, "session_booked");
+  return claimed;
 }
 
 /** Frees a booked slot back to `open` (the booking is undone). */
@@ -283,8 +308,8 @@ export async function cancelBooking(
     ? await participantCode(db, opts.session.enrollmentId)
     : "?";
 
-  return await db.transaction(async (tx) => {
-    const [updated] = await tx
+  const updated = await db.transaction(async (tx) => {
+    const [freed] = await tx
       .update(studySessions)
       .set({
         status: "open",
@@ -298,13 +323,15 @@ export async function cancelBooking(
       action: "session.booking_cancelled",
       actorId: opts.actor?.id ?? null,
       objectType: "session",
-      objectId: updated.id,
-      details: { code, studyId: updated.studyId },
+      objectId: freed.id,
+      details: { code, studyId: freed.studyId },
       requestId: opts.requestId,
       ip: opts.ip,
     });
-    return updated;
+    return freed;
   });
+  await pingSessionEvent(db, updated, code, "session_cancelled");
+  return updated;
 }
 
 /**
@@ -338,7 +365,7 @@ export async function rescheduleBooking(
   }
   const code = await participantCode(db, opts.enrollment.id);
 
-  return await db.transaction(async (tx) => {
+  const claimed = await db.transaction(async (tx) => {
     const [freed] = await tx
       .update(studySessions)
       .set({
@@ -383,6 +410,8 @@ export async function rescheduleBooking(
     });
     return claimed;
   });
+  await pingSessionEvent(db, claimed, code, "session_booked");
+  return claimed;
 }
 
 /** Lab-side outcome recording: a booked session is completed or a no-show. */
@@ -414,6 +443,9 @@ export async function markSessionOutcome(
     requestId: opts.requestId,
     ip: opts.ip,
   });
+  if (opts.status === "no_show") {
+    await pingSessionEvent(db, updated, code, "session_no_show");
+  }
   return updated;
 }
 

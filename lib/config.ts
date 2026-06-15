@@ -40,6 +40,11 @@ const ConfigSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().default(""),
   TELEGRAM_BOT_USERNAME: z.string().default(""),
   TELEGRAM_WEBHOOK_SECRET: z.string().default(""),
+  // Discord incoming webhook for INTERNAL notifications only (spec §5.4):
+  // job/backup failures, new eligible participant, session booked/cancelled/
+  // no-show, etc. Pseudonymous IDs only — never PII. Empty = disabled (alerts
+  // fall back to the console).
+  DISCORD_WEBHOOK_URL: z.string().default(""),
   // Comma-separated `<version>:<base64 32-byte key>` pairs; highest version
   // encrypts, all versions decrypt (see lib/crypto/encryption.ts).
   PII_ENCRYPTION_KEYS: z.string().regex(
