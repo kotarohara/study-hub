@@ -381,7 +381,21 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       `TELEGRAM_BOT_TOKEN`/`_USERNAME`/`_WEBHOOK_SECRET` (empty token = Telegram disabled; adapter registered in
       `main.ts` only when set). Tests: adapter/parser/deep-link units with simulated payloads; pairing/stop/webhook
       integration; and a notification channel-preference test (Telegram chosen, `/stop` falls back to email).
-- [ ] 3.8 Diary/ESM engine: schedule builder (fixed/interval/randomized windows), prompt dispatch, diary entry pages via magic link, optional quick replies
+- [x] 3.8 Diary/ESM engine: schedule builder (fixed/interval/randomized windows), prompt dispatch, diary entry pages via magic link, optional quick replies —
+      `lib/objects/diary_schedule.ts` (pure, exhaustively tested `buildPromptTimes`: fixed times / interval stepping /
+      randomized with injectable RNG + min-gap guarantee; `parseDiaryConfig` validates per window type; times are UTC
+      "HH:MM", documented). Domain in `lib/objects/diary.ts`: `configureDiary` (one schedule/study, pins the
+      instrument version), `generatePrompts`/`generatePromptsForActive` (idempotent per enrollment — never doubles
+      windows), `sweepDueDiaryPrompts` (cron tick mirroring `sweepDueReminders`: expires stale windows → `missed`,
+      dispatches due prompts as `diary_prompt` messages carrying a magic link, idempotent `diary:<id>`; reuses the
+      shared `resolveContact` so Telegram/email + do-not-contact/`/stop` all apply), and `submitDiaryEntry` (validated
+      against the pinned form, one `diary_response`, refuses closed windows, idempotent re-submit). New tables:
+      `diary_schedules`, `diary_prompts`, `diary_responses` (migration 0020); answers are jsonb tied to a pseudonymous
+      enrollment (never PII, like screeners). Participant entry page `routes/p/[token]/diary.tsx` (purpose "diary"
+      magic link; one-tap **quick replies** opt-in for single-question diaries). Study "Diary" tab
+      (`components/DiaryPanel.tsx`) configures the schedule, generates prompts, and shows pseudonymous per-participant
+      progress; cron wired in `message_cron.ts`. Tests: pure builder/parser units + integration (configure, generate
+      idempotency, dispatch-once/expire/unreachable, submit validation/closed/re-submit, progress, end-to-end delivery).
 - [ ] 3.9 Discord webhook adapter (internal events; pseudonymous IDs only — assert no PII in payloads via test)
 
 ## Phase 4 — Data & Compensation

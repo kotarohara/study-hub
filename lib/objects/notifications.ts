@@ -29,7 +29,7 @@ export interface NotifyResult {
   reason?: string;
 }
 
-interface Recipient {
+export interface Recipient {
   channel: MessageChannel;
   to: string;
   firstName: string;
@@ -41,8 +41,10 @@ interface Recipient {
  * A *verified* Telegram chat wins over email — pairing is an explicit
  * "reach me here" — and `/stop` suppresses it back to the email fallback.
  * Within a kind the preferred address is used, else the first usable one.
+ * Shared with the diary engine (3.8), which dispatches through the same
+ * channel logic.
  */
-async function resolveContact(
+export async function resolveContact(
   db: Db,
   enrollmentId: string,
 ): Promise<Recipient | { skip: string }> {

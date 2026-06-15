@@ -36,6 +36,14 @@ export const MESSAGE_TEMPLATES: Record<string, MessageTemplate> = {
       `Hi {{first_name}},\n\nA reminder that your session for {{study_title}} is at {{session_time}}{{session_location}}.\n\nSee you then!`,
     fields: ["first_name", "study_title", "session_time", "session_location"],
   },
+  diary_prompt: {
+    key: "diary_prompt",
+    channels: ["email", "telegram"],
+    subject: "{{study_title}}: a quick diary check-in",
+    body:
+      `Hi {{first_name}},\n\nIt's time for your {{study_title}} diary entry — it only takes a minute:\n\n{{diary_link}}\n\nThank you!`,
+    fields: ["first_name", "study_title", "diary_link"],
+  },
 } as const;
 
 export function isMessageTemplate(key: string): boolean {

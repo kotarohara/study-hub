@@ -3,6 +3,7 @@ import type { Config } from "../config.ts";
 import { getDb } from "../db/client.ts";
 import { runDueMessages } from "./message_runner.ts";
 import { sweepDueReminders } from "../objects/notifications.ts";
+import { sweepDueDiaryPrompts } from "../objects/diary.ts";
 
 /** Drains the message queue every minute via Deno.cron (spec §3.8: no
  * external scheduler). Gated by JOBS_ENABLED and the --unstable-cron flag,
@@ -23,6 +24,10 @@ export function registerMessageCron(config: Config): boolean {
       const swept = await sweepDueReminders(getDb());
       if (swept.enqueued > 0) {
         console.log(`reminders: enqueued ${swept.enqueued}`);
+      }
+      const diary = await sweepDueDiaryPrompts(getDb());
+      if (diary.sent > 0 || diary.missed > 0) {
+        console.log(`diary: sent ${diary.sent}, missed ${diary.missed}`);
       }
       const summary = await runDueMessages(getDb());
       if (summary.claimed > 0) {

@@ -25,6 +25,7 @@ import TimelineGantt from "../../../islands/TimelineGantt.tsx";
 import { type GanttItem, ganttRange } from "../../../lib/ooui/gantt.ts";
 import type {
   Condition,
+  DiarySchedule,
   Document,
   Member,
   Participant,
@@ -50,8 +51,15 @@ import {
   listMessagesOfStudy,
   type StudyMessageLogRow,
 } from "../../../lib/objects/messaging.ts";
+import {
+  diaryProgress,
+  type DiaryProgressRow,
+  getDiarySchedule,
+} from "../../../lib/objects/diary.ts";
+import { listInstruments } from "../../../lib/objects/instruments.ts";
 import { SessionPanel } from "../../../components/SessionPanel.tsx";
 import { MessageLog } from "../../../components/MessageLog.tsx";
+import { DiaryPanel } from "../../../components/DiaryPanel.tsx";
 import { audit } from "../../../lib/audit/log.ts";
 import { clientHost } from "../../../lib/auth/limiters.ts";
 import { Layout } from "../../../components/Layout.tsx";
@@ -78,6 +86,9 @@ interface Data {
   sessions: SessionRow[];
   bookable: { id: string; code: string }[];
   messages: StudyMessageLogRow[];
+  diarySchedule: DiarySchedule | null;
+  diaryInstruments: { id: string; name: string; currentVersion: number }[];
+  diaryProgress: DiaryProgressRow[];
 }
 
 const TABS = [
@@ -86,6 +97,7 @@ const TABS = [
   { id: "participants", label: "Participants" },
   { id: "recruitment", label: "Recruitment" },
   { id: "sessions", label: "Sessions" },
+  { id: "diary", label: "Diary" },
   { id: "documents", label: "Documents" },
   { id: "timeline", label: "Timeline" },
 ];
@@ -152,6 +164,21 @@ export const handler = define.handlers({
         : [],
       messages: activeTab === "sessions"
         ? await listMessagesOfStudy(getDb(), found.study.id)
+        : [],
+      diarySchedule: activeTab === "diary"
+        ? await getDiarySchedule(getDb(), found.study.id)
+        : null,
+      diaryInstruments: activeTab === "diary"
+        ? (await listInstruments(getDb()))
+          .filter((i) => i.kind === "simple_form")
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            currentVersion: i.currentVersion,
+          }))
+        : [],
+      diaryProgress: activeTab === "diary"
+        ? await diaryProgress(getDb(), found.study.id)
         : [],
     });
   },
@@ -484,6 +511,16 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             />
             <MessageLog rows={data.messages} />
           </div>
+        )}
+        {data.activeTab === "diary" && (
+          <DiaryPanel
+            study={study}
+            schedule={data.diarySchedule}
+            instruments={data.diaryInstruments}
+            progress={data.diaryProgress}
+            canManage={hasRole(me.role, "researcher")}
+            canOperate={hasRole(me.role, "assistant")}
+          />
         )}
         {data.activeTab === "timeline" && (
           <div class="space-y-4">
