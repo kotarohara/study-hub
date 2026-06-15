@@ -420,8 +420,12 @@ export async function submitDiaryEntry(
   const { answers, errors } = validateResponse(opts.items, opts.raw);
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
+  // The unique-promptId insert is the source of truth for "already answered":
+  // an empty returning means a response already exists (a stale snapshot or a
+  // concurrent submit), so we leave the first entry untouched.
+  let already = false;
   await db.transaction(async (tx) => {
-    await tx
+    const inserted = await tx
       .insert(diaryResponses)
       .values({
         promptId: opts.prompt.id,
@@ -429,13 +433,18 @@ export async function submitDiaryEntry(
         instrumentVersionNumber: opts.instrumentVersionNumber,
         answers,
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: diaryResponses.id });
+    if (inserted.length === 0) {
+      already = true;
+      return;
+    }
     await tx
       .update(diaryPrompts)
       .set({ status: "answered", answeredAt: now, updatedAt: now })
       .where(eq(diaryPrompts.id, opts.prompt.id));
   });
-  return { ok: true };
+  return already ? { ok: true, already: true } : { ok: true };
 }
 
 // --- listing (pseudonymous) ----------------------------------------------
