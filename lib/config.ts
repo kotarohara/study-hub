@@ -33,6 +33,18 @@ const ConfigSchema = z.object({
   // Shared secret guarding the SES bounce webhook (matched against the
   // ?token= query). Empty disables the check (dev only).
   SES_WEBHOOK_TOKEN: z.string().default(""),
+  // Telegram Bot API (spec §3.8, §6). Empty token = Telegram disabled (no
+  // adapter registered; dev runs on email only). The username builds the
+  // t.me pairing deep link. The webhook secret is matched against Telegram's
+  // X-Telegram-Bot-Api-Secret-Token header; empty disables the check.
+  TELEGRAM_BOT_TOKEN: z.string().default(""),
+  TELEGRAM_BOT_USERNAME: z.string().default(""),
+  TELEGRAM_WEBHOOK_SECRET: z.string().default(""),
+  // Discord incoming webhook for INTERNAL notifications only (spec §5.4):
+  // job/backup failures, new eligible participant, session booked/cancelled/
+  // no-show, etc. Pseudonymous IDs only — never PII. Empty = disabled (alerts
+  // fall back to the console).
+  DISCORD_WEBHOOK_URL: z.string().default(""),
   // Comma-separated `<version>:<base64 32-byte key>` pairs; highest version
   // encrypts, all versions decrypt (see lib/crypto/encryption.ts).
   PII_ENCRYPTION_KEYS: z.string().regex(
@@ -49,6 +61,9 @@ const ConfigSchema = z.object({
    * closed — public forms reject every submission until configured. */
   TURNSTILE_SITE_KEY: z.string().default(""),
   TURNSTILE_SECRET_KEY: z.string().default(""),
+  /** Runs the in-process job runner (message delivery cron). Off in dev
+   * by default; needs --unstable-cron. */
+  JOBS_ENABLED: z.stringbool().default(false),
   BACKUP_CRON_ENABLED: z.stringbool().default(false),
   BACKUP_CRON: z.string().default("0 18 * * *"), // 02:00 SGT
 });

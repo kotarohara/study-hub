@@ -555,6 +555,120 @@ export const screenerResponses = pgTable("screener_responses", {
 
 export type ScreenerResponse = typeof screenerResponses.$inferSelect;
 
+// Diary / ESM engine (spec §3.8, phase plan §8 "3.5 Diary engine"): an
+// experience-sampling scheduler. A study configures ONE diary_schedule —
+// which simple-form instrument to ask, how often (fixed/interval/randomized
+// windows), and for how long. Generating prompts for an active enrollment
+// expands the schedule into diary_prompts (one row per window). The cron
+// sweep dispatches each due prompt as a Message carrying a magic link to
+// p/[token]/diary, where the entry is stored as a diary_response. Diary
+// answers are research data tied to a pseudonymous enrollment and (like
+// screeners) must not ask PII, so they are jsonb, not encrypted.
+export const diaryWindowType = pgEnum("diary_window_type", [
+  "fixed",
+  "interval",
+  "randomized",
+]);
+
+export const diarySchedules = pgTable("diary_schedules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studyId: uuid("study_id")
+    .notNull()
+    .unique()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  instrumentId: uuid("instrument_id")
+    .notNull()
+    .references(() => instruments.id),
+  /** Pinned at configure time; revising the instrument never silently
+   * changes a live diary. */
+  instrumentVersionNumber: integer("instrument_version_number").notNull(),
+  windowType: diaryWindowType("window_type").notNull(),
+  /** Window-type-specific params (validated by lib/objects/diary_schedule.ts). */
+  config: jsonb("config").$type<Record<string, unknown>>().notNull(),
+  /** How many calendar days the diary runs from an enrollment's start. */
+  durationDays: integer("duration_days").notNull(),
+  /** Minutes a prompt stays answerable before it is marked missed. */
+  expiryMinutes: integer("expiry_minutes").notNull(),
+  /** Opt-in one-tap replies for single-question diaries (spec §5.1). */
+  quickReply: boolean("quick_reply").notNull().default(false),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type DiarySchedule = typeof diarySchedules.$inferSelect;
+
+export const diaryPromptStatus = pgEnum("diary_prompt_status", [
+  "scheduled",
+  "sent",
+  "answered",
+  "missed",
+  "cancelled",
+]);
+
+export const diaryPrompts = pgTable("diary_prompts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  scheduleId: uuid("schedule_id")
+    .notNull()
+    .references(() => diarySchedules.id, { onDelete: "cascade" }),
+  enrollmentId: uuid("enrollment_id")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  /** Denormalized for sweeping and per-study listing without a join. */
+  studyId: uuid("study_id")
+    .notNull()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  promptAt: timestamp("prompt_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  status: diaryPromptStatus("status").notNull().default("scheduled"),
+  /** Pilot data quarantine: inherited from the enrollment. */
+  isPilot: boolean("is_pilot").notNull().default(false),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  answeredAt: timestamp("answered_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("diary_prompts_due_idx").on(table.status, table.promptAt),
+  index("diary_prompts_enrollment_idx").on(table.enrollmentId),
+  // Makes prompt generation idempotent: the same window is never doubled.
+  unique("diary_prompts_window_unique").on(
+    table.scheduleId,
+    table.enrollmentId,
+    table.promptAt,
+  ),
+]);
+
+export type DiaryPrompt = typeof diaryPrompts.$inferSelect;
+
+export const diaryResponses = pgTable("diary_responses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** One entry per prompt. */
+  promptId: uuid("prompt_id")
+    .notNull()
+    .unique()
+    .references(() => diaryPrompts.id, { onDelete: "cascade" }),
+  enrollmentId: uuid("enrollment_id")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  instrumentVersionNumber: integer("instrument_version_number").notNull(),
+  answers: jsonb("answers").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type DiaryResponse = typeof diaryResponses.$inferSelect;
+
 // Sessions (spec §2.1, §4 kept-feature 2): a scheduled data-collection
 // encounter — a lab slot, interview, or diary window. The auth `sessions`
 // table above is unrelated; this is the domain object, stored as
@@ -642,6 +756,9 @@ export const messages = pgTable("messages", {
   providerMessageId: text("provider_message_id"),
   /** At-most-once enqueue key for the job runner (Phase 3.5). */
   idempotencyKey: text("idempotency_key").unique(),
+  /** When the runner may next attempt delivery: null = immediately, a
+   * future time = scheduled (a reminder) or backed-off after a failure. */
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
   enrollmentId: uuid("enrollment_id").references(() => enrollments.id, {
     onDelete: "set null",
   }),
@@ -662,6 +779,32 @@ export const messages = pgTable("messages", {
 ]);
 
 export type Message = typeof messages.$inferSelect;
+
+// Background jobs (spec §3.8, §6: Deno.cron + a jobs table, no external
+// queue). This is the idempotency ledger for scheduled work: a cron handler
+// claims a uniquely-keyed job ("reminders:2026-06-15T10:00Z") so a window
+// runs at most once even across restarts or a double-fired cron. Per-message
+// delivery retries live on the messages table; this tracks the run itself.
+export const jobStatus = pgEnum("job_status", ["running", "done", "failed"]);
+
+export const jobs = pgTable("jobs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Idempotency key — uniqueness is what makes a job run at most once. */
+  key: text("key").notNull().unique(),
+  /** Job family, e.g. "reminders", "backup" (not PII). */
+  kind: text("kind").notNull(),
+  status: jobStatus("status").notNull().default("running"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  startedAt: timestamp("started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+}, (table) => [
+  index("jobs_kind_idx").on(table.kind),
+]);
+
+export type Job = typeof jobs.$inferSelect;
 
 // Consents (spec §4 kept-feature 1): a participant's signed agreement to
 // a specific APPROVED version of the study's consent Document. Amendments

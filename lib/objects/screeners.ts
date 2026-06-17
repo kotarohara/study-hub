@@ -17,6 +17,7 @@ import {
 } from "../db/schema.ts";
 import { audit } from "../audit/log.ts";
 import { getConfig } from "../config.ts";
+import { notifyDiscordEvent } from "../integrations/discord.ts";
 import {
   type FormItem,
   parseItems,
@@ -263,7 +264,8 @@ export async function submitScreener(
   }
   const eligible = evaluateEligibility(opts.definition.rules, answers);
 
-  return await db.transaction(async (tx) => {
+  let code = "";
+  const result = await db.transaction(async (tx) => {
     const participant = await createParticipant(tx as unknown as Db, {
       name: opts.contact.name,
       source: "screener",
@@ -272,6 +274,7 @@ export async function submitScreener(
       requestId: opts.requestId,
       ip: opts.ip,
     });
+    code = participant.code;
     const [enrollment] = await tx
       .insert(enrollments)
       .values({
@@ -299,6 +302,16 @@ export async function submitScreener(
     });
     return { enrollment, eligible };
   });
+  // Notify the lab channel of a new eligible participant (pseudonymous; spec
+  // §5.4). Fire-and-forget, no-op when Discord is unconfigured.
+  if (result.eligible) {
+    void notifyDiscordEvent({
+      kind: "enrollment_eligible",
+      study: opts.study.name,
+      code,
+    });
+  }
+  return result;
 }
 
 export interface ResponseRow {

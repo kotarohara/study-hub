@@ -344,11 +344,71 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       Mailpit API, suppression integration (blind-index match, per-channel, no-PII audit).
       ⚠ STARTTLS+AUTH path is prod-only (not exercised by local Mailpit); suppressed channels
       are recorded now, enforcement at send time wires in with reminders (3.6).
-- [ ] 3.5 Job infrastructure: `Deno.cron` + `jobs`/`messages` tables, idempotency keys, retries with backoff, failure alerts via notification adapter + tests (incl. duplicate-send prevention)
-- [ ] 3.6 Session reminders + booking confirmations end-to-end (visible in Mailpit)
-- [ ] 3.7 Telegram adapter: webhook route, pairing deep link (one-time token → verified ContactChannel), reminders, `/stop` → email fallback; tested with simulated Bot API payloads
-- [ ] 3.8 Diary/ESM engine: schedule builder (fixed/interval/randomized windows), prompt dispatch, diary entry pages via magic link, optional quick replies
-- [ ] 3.9 Discord webhook adapter (internal events; pseudonymous IDs only — assert no PII in payloads via test)
+- [x] 3.5 Job infrastructure: `Deno.cron` + `jobs`/`messages` tables, idempotency keys, retries with backoff, failure alerts via notification adapter + tests (incl. duplicate-send prevention)
+      Message runner (`lib/jobs/message_runner.ts`) drains the queue: selects due messages
+      (queued, or failed with attempts<MAX and past backoff), delivers via the registered
+      adapter, applies exponential backoff (`backoffMs`: 1m→2m→4m… capped 1h, on the new
+      `messages.next_attempt_at` column), and fires a failure alert after MAX_ATTEMPTS (5).
+      Duplicate-send prevented two ways: enqueue idempotent on `idempotencyKey`, and
+      `deliverMessage` no-ops once `sent` (runner never selects `sent`). `nextAttemptAt` also
+      lets a message be enqueued for future delivery (scheduled reminders, 3.6). Generic `jobs`
+      table + `runJobOnce` (migration 0019): unique-key claim runs a scheduled window at most
+      once (for 3.6 reminder windows), recording status/attempts/error; a throwing job is logged
+      failed + alerted, never crashes the cron. Pluggable `AlertSink` (`lib/jobs/alerts.ts`,
+      console default; Discord wires in at 3.9). `registerMessageCron` (every minute, gated by
+      JOBS_ENABLED + --unstable-cron) in main.ts. Pure tests (backoff, alert routing) + integration
+      (deliver/retry-backoff/permanent-fail+alert, scheduled-hold, no re-send; runJobOnce once +
+      skip-on-repeat + failure alert).
+- [x] 3.6 Session reminders + booking confirmations end-to-end (visible in Mailpit) — `lib/objects/notifications.ts`:
+      `notifyBookingConfirmed` (called after booking on both the lab route `sessions/[id]/book.ts` and the
+      participant self-book/reschedule route `p/[token]/book.tsx`) and `sweepDueReminders` (a periodic sweep
+      reading live session state — reschedules/cancellations are handled for free, idempotent per session via
+      `confirm:`/`reminder:` keys). Both enforce the compliance gates deferred from 3.1/3.4: do-not-contact and
+      bounce-suppressed channels are skipped. The message cron (3.5) sweeps reminders then drains the queue each
+      minute. Study Sessions tab gains a pseudonymous "Message log" (`components/MessageLog.tsx` + `listMessagesOfStudy`
+      — participant code only, no PII). End-to-end test proves a confirmation lands in Mailpit via the real EmailAdapter.
+- [x] 3.7 Telegram adapter: webhook route, pairing deep link (one-time token → verified ContactChannel), reminders, `/stop` → email fallback; tested with simulated Bot API payloads —
+      `lib/integrations/telegram.ts` (`TelegramAdapter` over an injectable transport so the Bot API is testable
+      without network; `pairingDeepLink`, `toSendResult`), `lib/integrations/telegram_update.ts` (pure `parseUpdate`
+      of Bot API updates → `/start <token>` / `/stop` / other / ignore), and `lib/objects/telegram.ts` (pairing
+      domain: `telegramPairingToken`/`telegramDeepLink` (purpose `telegram_pair`, 7-day TTL), `pairTelegram`
+      (one-time token → verified, un-suppressed telegram ContactChannel; idempotent re-pair), `stopTelegram`
+      (suppress by blind index → email fallback), and `handleTelegramUpdate` orchestrating the webhook reply).
+      Webhook at `routes/hooks/telegram.ts` (secret-header guarded, thin shell, always 200); researcher pairing-link
+      page at `routes/participants/[id]/telegram-link.tsx` surfaced from the participant Channels tab. Notification
+      resolution generalized: `resolveContact` prefers a verified Telegram chat over email (skip reason now
+      `no_channel`), and the message runner delivers via the channel's registered adapter. Config gains
+      `TELEGRAM_BOT_TOKEN`/`_USERNAME`/`_WEBHOOK_SECRET` (empty token = Telegram disabled; adapter registered in
+      `main.ts` only when set). Tests: adapter/parser/deep-link units with simulated payloads; pairing/stop/webhook
+      integration; and a notification channel-preference test (Telegram chosen, `/stop` falls back to email).
+- [x] 3.8 Diary/ESM engine: schedule builder (fixed/interval/randomized windows), prompt dispatch, diary entry pages via magic link, optional quick replies —
+      `lib/objects/diary_schedule.ts` (pure, exhaustively tested `buildPromptTimes`: fixed times / interval stepping /
+      randomized with injectable RNG + min-gap guarantee; `parseDiaryConfig` validates per window type; times are UTC
+      "HH:MM", documented). Domain in `lib/objects/diary.ts`: `configureDiary` (one schedule/study, pins the
+      instrument version), `generatePrompts`/`generatePromptsForActive` (idempotent per enrollment — never doubles
+      windows), `sweepDueDiaryPrompts` (cron tick mirroring `sweepDueReminders`: expires stale windows → `missed`,
+      dispatches due prompts as `diary_prompt` messages carrying a magic link, idempotent `diary:<id>`; reuses the
+      shared `resolveContact` so Telegram/email + do-not-contact/`/stop` all apply), and `submitDiaryEntry` (validated
+      against the pinned form, one `diary_response`, refuses closed windows, idempotent re-submit). New tables:
+      `diary_schedules`, `diary_prompts`, `diary_responses` (migration 0020); answers are jsonb tied to a pseudonymous
+      enrollment (never PII, like screeners). Participant entry page `routes/p/[token]/diary.tsx` (purpose "diary"
+      magic link; one-tap **quick replies** opt-in for single-question diaries). Study "Diary" tab
+      (`components/DiaryPanel.tsx`) configures the schedule, generates prompts, and shows pseudonymous per-participant
+      progress; cron wired in `message_cron.ts`. Tests: pure builder/parser units + integration (configure, generate
+      idempotency, dispatch-once/expire/unreachable, submit validation/closed/re-submit, progress, end-to-end delivery).
+- [x] 3.9 Discord webhook adapter (internal events; pseudonymous IDs only — assert no PII in payloads via test) —
+      `lib/integrations/discord.ts`: outbound webhook POSTs to a lab channel (no bot/gateway/slash commands, all cut
+      per spec §5.4) over an injectable transport (fake-testable, no network). Two roles: (1) a real **AlertSink**
+      (`discordAlertSink`) wired in `main.ts` so background-job / backup / message-delivery failures ping Discord
+      when `DISCORD_WEBHOOK_URL` is set (else they stay on the console); (2) `notifyDiscordEvent` for lab events —
+      a `DiscordEvent` union (enrollment eligible, session booked/cancelled/no-show, milestone due, IRB expiring,
+      payment pending) that **by construction carries only pseudonymous codes + internal study names — no field
+      for a name/email/phone/chat id**. Fire-and-forget, no-op when unconfigured, never throws. Wired into
+      `screeners.submitScreener` (new eligible participant) and `sessions.ts` (booked/cancelled/no-show), guarded by
+      `discordConfigured()` so there's zero cost when off. Config gains `DISCORD_WEBHOOK_URL`. Tests
+      (`discord_test.ts`): the **no-PII invariant** (every event kind serialized, asserting participant
+      name/email/phone/Telegram handle never appear), formatter output, transport success/non-2xx/throw handling,
+      and the alert sink. **Phase 3 (first usable release + comms) complete.**
 
 ## Phase 4 — Data & Compensation
 

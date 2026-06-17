@@ -21,6 +21,7 @@ import {
   SessionError,
   verifyBookingToken,
 } from "../../../lib/objects/sessions.ts";
+import { notifyBookingConfirmed } from "../../../lib/objects/notifications.ts";
 import { PublicLayout } from "../../../components/PublicLayout.tsx";
 
 const bookLimiter = new RateLimiter({ capacity: 12, refillPerSecond: 1 / 60 });
@@ -126,22 +127,21 @@ export const handler = define.handlers({
       const current =
         (await listSessionsOfEnrollment(live.db, live.enrollment.id))
           .find((s) => s.status === "booked");
-      if (current) {
-        await rescheduleBooking(live.db, {
+      const booked = current
+        ? await rescheduleBooking(live.db, {
           from: current,
           to: slot,
           enrollment: live.enrollment,
           actor: null,
           ...auditCtx,
-        });
-      } else {
-        await bookSession(live.db, {
+        })
+        : await bookSession(live.db, {
           session: slot,
           enrollment: live.enrollment,
           actor: null,
           ...auditCtx,
         });
-      }
+      await notifyBookingConfirmed(live.db, booked.id);
       return page<Data>({
         state: "done",
         studyName: live.study.name,
