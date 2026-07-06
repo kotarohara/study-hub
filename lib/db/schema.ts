@@ -798,6 +798,66 @@ export const datasetFiles = pgTable("dataset_files", {
 
 export type DatasetFile = typeof datasetFiles.$inferSelect;
 
+// Compensation (spec §2.1, §3.9): what a participant is owed for an
+// enrollment, tracked pending → approved → paid. Amounts are integer cents
+// (SGD by default) — never floats. Rows are pseudonymous (linkage via
+// enrollment); the PI-gated ledger export (4.8) is the only place an
+// amount ever meets a name. Approvals and payouts are audited (spec §4).
+export const compensationMethod = pgEnum("compensation_method", [
+  "paynow",
+  "paypal",
+  "prolific",
+  "cash",
+  "voucher",
+]);
+
+export type CompensationMethod = (typeof compensationMethod.enumValues)[number];
+
+export const compensationStatus = pgEnum("compensation_status", [
+  "pending",
+  "approved",
+  "paid",
+]);
+
+export type CompensationStatus = (typeof compensationStatus.enumValues)[number];
+
+export const compensations = pgTable("compensations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  enrollmentId: uuid("enrollment_id")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  amountCents: integer("amount_cents").notNull(),
+  currency: text("currency").notNull().default("SGD"),
+  /** What the payment is for: "base", "bonus", "per-session", … */
+  scheme: text("scheme").notNull().default(""),
+  method: compensationMethod("method").notNull(),
+  status: compensationStatus("status").notNull().default("pending"),
+  approvedBy: uuid("approved_by").references(() => members.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  paidBy: uuid("paid_by").references(() => members.id),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  /** Transfer reference recorded at mark-as-paid (spec §3.9). */
+  reference: text("reference").notNull().default(""),
+  /** Prolific submission id (spec §3.9); the Prolific ID itself is a
+   * ContactChannel. Not PII — a platform-scoped opaque id. */
+  prolificSubmissionId: text("prolific_submission_id").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("compensations_enrollment_idx").on(table.enrollmentId),
+  index("compensations_status_idx").on(table.status),
+]);
+
+export type Compensation = typeof compensations.$inferSelect;
+
 // Messages (spec §3.8): the delivery log for every outbound message —
 // session reminders, booking confirmations, diary prompts, recruitment
 // invites. Channel-agnostic (email/telegram/discord behind a

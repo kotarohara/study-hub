@@ -131,6 +131,39 @@ export async function notifyBookingConfirmed(
   return { enqueued: true };
 }
 
+/**
+ * Enqueues a payment confirmation for a paid compensation (spec §3.9,
+ * idempotent per compensation). Same compliance gates as every other send.
+ */
+export async function notifyPaymentSent(
+  db: Db,
+  opts: {
+    compensationId: string;
+    enrollmentId: string;
+    studyId: string;
+    amountLabel: string;
+  },
+): Promise<NotifyResult> {
+  const study = await getStudy(db, opts.studyId);
+  if (!study) return { enqueued: false, reason: "not_booked" };
+  const recipient = await resolveContact(db, opts.enrollmentId);
+  if ("skip" in recipient) return { enqueued: false, reason: recipient.skip };
+
+  await enqueueMessage(db, {
+    channel: recipient.channel,
+    to: recipient.to,
+    templateKey: "payment_confirmation",
+    fields: {
+      first_name: recipient.firstName,
+      study_title: study.name,
+      amount: opts.amountLabel,
+    },
+    enrollmentId: opts.enrollmentId,
+    idempotencyKey: `payment:${opts.compensationId}`,
+  });
+  return { enqueued: true };
+}
+
 export interface SweepResult {
   enqueued: number;
   skipped: number;

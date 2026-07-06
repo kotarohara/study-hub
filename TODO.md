@@ -455,9 +455,25 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       `export.create` BEFORE bytes leave. Tests: profile semantics with injected RNG (same person ⇒ same fresh id,
       no metadata/stable codes), OSF column dropping, CSV quoting, ZIP roundtrip, and a DB test with a real
       encrypted participant proving name/email/stable-code never appear in de-identified/OSF output.
-- [ ] 4.6 Compensation object (amount, scheme, method, status pending → approved → paid); outstanding-payments dashboard
-- [ ] 4.7 PayNow/PayPal run sheets + mark-as-paid; Prolific ID tracking; payment confirmations to participants
-- [ ] 4.8 Ledger export (Name / Phone / Amount), PI-gated + audited + tests
+- [x] 4.6 Compensation object (amount, scheme, method, status pending → approved → paid); outstanding-payments
+      dashboard — `compensations` table (migration 0022): integer cents (SGD default), scheme, method
+      (paynow/paypal/prolific/cash/voucher), enforced pending → approved → paid lifecycle with approver/payer +
+      timestamps, transfer `reference`, `prolific_submission_id`. Approvals (`payment.approve`) and payouts
+      (`payment.paid`) audited; races guarded by status-conditional updates. `/payments` dashboard (new nav item):
+      every unpaid compensation lab-wide oldest-first with approve (researcher+) / mark-paid (assistant+) actions,
+      totals (pending / approved, approved-by-method = each run sheet's size), and an add-compensation flow
+      (study → enrollment picker, SSR).
+- [x] 4.7 PayNow/PayPal run sheets + mark-as-paid; Prolific ID tracking; payment confirmations to participants —
+      `lib/objects/ledger.ts` `runSheet(method)`: approved-unpaid rows with decrypted name + payment address
+      (PayNow phone / PayPal email / Prolific ID from ContactChannels; missing channels surface as empty payTo, not
+      silently dropped). CSV at `/payments/runsheet?method=` — PII-bearing → **PI-only**, audited `pii.export`
+      before bytes leave. Close-out: "mark all paid" per method with a shared transfer reference (`markBatchPaid`,
+      only approved rows flip, each payout audited). Every mark-paid enqueues an idempotent `payment_confirmation`
+      message (`payment:<id>`) through the same channel resolution + compliance gates as reminders.
+- [x] 4.8 Ledger export (Name / Phone / Amount), PI-gated + audited + tests — `/payments/ledger`: every PAID
+      compensation with the spec-fixed columns Name / Phone Number / Compensation Amount (+ paid date, method,
+      reference). PI-only; `pii.export` audit written before the response. Tests cover decrypted run-sheet values,
+      ledger columns, and gating-by-status.
 - [ ] 4.9 Withdrawal workflow (action, data handling per consent) + retention timers + PI-approved purge
 
 ## Phase 5 — Polish (still local)
