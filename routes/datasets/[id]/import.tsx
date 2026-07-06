@@ -36,12 +36,12 @@ interface Data {
 }
 
 async function loadTable(
-  ctx: { params: { id: string } },
+  datasetId: string,
   member: Parameters<typeof getDatasetFor>[1],
   fileId: string,
 ) {
   const db = getDb();
-  const found = await getDatasetFor(db, member, ctx.params.id);
+  const found = await getDatasetFor(db, member, datasetId);
   if (!found) throw new HttpError(404);
   const file = await getDatasetFile(db, found.dataset.id, fileId);
   if (!file) throw new HttpError(404);
@@ -61,7 +61,7 @@ export const handler = define.handlers({
     const me = ctx.state.member!;
     if (!hasRole(me.role, "researcher")) throw new HttpError(403);
     const fileId = ctx.url.searchParams.get("file") ?? "";
-    const live = await loadTable(ctx, me, fileId);
+    const live = await loadTable(ctx.params.id, me, fileId);
     return page<Data>({
       datasetId: live.dataset.id,
       datasetName: live.dataset.name,
@@ -77,7 +77,7 @@ export const handler = define.handlers({
     if (!hasRole(me.role, "researcher")) throw new HttpError(403);
     const form = await ctx.req.formData();
     const fileId = String(form.get("fileId") ?? "");
-    const live = await loadTable(ctx, me, fileId);
+    const live = await loadTable(ctx.params.id, me, fileId);
 
     const rawCode = String(form.get("codeColumn") ?? "");
     const mapping = {
