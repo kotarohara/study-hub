@@ -34,6 +34,8 @@ import {
   recordColumns,
 } from "./datasets.ts";
 import { importIntoDataset } from "./importer.ts";
+import { addChannel } from "./participants.ts";
+import { applyProfile } from "../export/profiles.ts";
 
 interface Env {
   db: Awaited<ReturnType<typeof getTestDb>>;
@@ -243,6 +245,57 @@ Deno.test("importIntoDataset: code linkage, unmatched kept unlinked, idempotent"
     assert.ok(linked);
     assert.equal(linked.record.enrollmentId, enrollment.id);
     assert.equal(records.filter((r) => r.participantCode === null).length, 2);
+  });
+});
+
+Deno.test("export profiles: PII never leaks into de-identified/OSF output", async () => {
+  await withEnv(async ({ db, study, member, participant, enrollment }) => {
+    // The participant's real PII (name is set in withEnv; add an email).
+    const PII = ["Ada Data", "ada-data@example.com"];
+    await db.update(participants)
+      .set({ name: "Ada Data" })
+      .where(eq(participants.id, participant.id));
+    await addChannel(db, {
+      participant,
+      channel: { kind: "email", value: "ada-data@example.com" },
+      actor: member,
+    });
+
+    const dataset = await createDataset(db, {
+      study,
+      name: "Export test",
+      createdBy: member,
+    });
+    await addRecords(db, {
+      dataset,
+      rows: [
+        { enrollmentId: enrollment.id, data: { mood: 4, note: "all good" } },
+        { enrollmentId: enrollment.id, data: { mood: 2, note: "tired" } },
+      ],
+    });
+    const records = await listRecords(db, dataset.id);
+
+    // De-identified and OSF: no name, no email, no stable code — anywhere.
+    for (const profile of ["de_identified", "osf"] as const) {
+      const out = applyProfile(records, profile);
+      const json = JSON.stringify(out);
+      for (const leak of PII) {
+        assert.ok(!json.includes(leak), `${profile} leaked "${leak}"`);
+      }
+      assert.ok(
+        !json.includes(participant.code),
+        `${profile} leaked the stable code`,
+      );
+      assert.ok(!json.includes(enrollment.id), `${profile} leaked ids`);
+    }
+
+    // Full keeps the stable pseudonymous code — but still never PII.
+    const full = applyProfile(records, "full");
+    const fullJson = JSON.stringify(full);
+    assert.ok(fullJson.includes(participant.code));
+    for (const leak of PII) {
+      assert.ok(!fullJson.includes(leak), `full leaked "${leak}"`);
+    }
   });
 });
 

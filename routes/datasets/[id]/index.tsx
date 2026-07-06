@@ -147,6 +147,31 @@ export default define.page<typeof handler>(({ data, state, url }) => {
               >
                 Explore (EDA) →
               </a>
+              {canImport && (
+                <span class="inline-flex items-center gap-2 text-xs text-gray-500">
+                  Export:
+                  <a
+                    href={`/datasets/${dataset.id}/export?profile=de_identified&format=csv`}
+                    class="text-brand-700 hover:underline"
+                  >
+                    de-identified CSV
+                  </a>
+                  <a
+                    href={`/datasets/${dataset.id}/export?profile=osf&format=bundle`}
+                    class="text-brand-700 hover:underline"
+                  >
+                    OSF bundle
+                  </a>
+                  {me.role === "pi" && (
+                    <a
+                      href={`/datasets/${dataset.id}/export?profile=full&format=csv`}
+                      class="text-brand-700 hover:underline"
+                    >
+                      full (PI)
+                    </a>
+                  )}
+                </span>
+              )}
               <a
                 href={`/datasets/${dataset.id}${
                   data.includePilot ? "" : "?pilot=1"

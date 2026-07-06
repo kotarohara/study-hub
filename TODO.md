@@ -443,7 +443,18 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       browser) with condition linkage. Scale auto-scoring (`lib/eda/scale_scores.ts`): the study's screener/diary
       instruments' scoring rules become derived `scale_<rule>` columns (deterministic derivation server-side;
       partial scales score null and are skipped). Pure tests for stats + scale derivation.
-- [ ] 4.5 Export: CSV/JSON; profiles full (PI-only) / de-identified / OSF-ready; analysis-ready bundle (data + codebook + R/Python loader); export audit + tests proving PII never leaks into de-identified profiles
+- [x] 4.5 Export: CSV/JSON; profiles full (PI-only) / de-identified / OSF-ready; analysis-ready bundle (data +
+      codebook + R/Python loader); export audit + tests proving PII never leaks into de-identified profiles —
+      `lib/export/`: `profiles.ts` defines the three levels (full: stable codes + condition + session/provenance
+      metadata, PI-only because stable codes enable cross-study joins, pilot rows only on explicit request and
+      flagged; de_identified: fresh per-export ids `P001…` assigned in shuffled order, rows shuffled, all metadata
+      dropped, pilot always excluded; osf: de-identified minus open-ended text columns — string columns with >20
+      distinct values, where self-identifying detail hides). `csv.ts` (RFC-4180 serializer), `zip.ts` (hand-rolled
+      store-only ZIP + CRC-32, proven extractable by system `unzip` in tests), `bundle.ts` (data.csv +
+      codebook.json + load.R + load.py + README). Route `routes/datasets/[id]/export.ts` gates full to PI, audits
+      `export.create` BEFORE bytes leave. Tests: profile semantics with injected RNG (same person ⇒ same fresh id,
+      no metadata/stable codes), OSF column dropping, CSV quoting, ZIP roundtrip, and a DB test with a real
+      encrypted participant proving name/email/stable-code never appear in de-identified/OSF output.
 - [ ] 4.6 Compensation object (amount, scheme, method, status pending → approved → paid); outstanding-payments dashboard
 - [ ] 4.7 PayNow/PayPal run sheets + mark-as-paid; Prolific ID tracking; payment confirmations to participants
 - [ ] 4.8 Ledger export (Name / Phone / Amount), PI-gated + audited + tests
