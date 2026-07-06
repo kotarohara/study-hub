@@ -474,7 +474,19 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       compensation with the spec-fixed columns Name / Phone Number / Compensation Amount (+ paid date, method,
       reference). PI-only; `pii.export` audit written before the response. Tests cover decrypted run-sheet values,
       ledger columns, and gating-by-status.
-- [ ] 4.9 Withdrawal workflow (action, data handling per consent) + retention timers + PI-approved purge
+- [x] 4.9 Withdrawal workflow (action, data handling per consent) + retention timers + PI-approved purge —
+      `lib/objects/withdrawal.ts`: `withdrawEnrollment` = the lifecycle transition PLUS everything it would leave
+      dangling — scheduled/sent diary prompts cancelled, future booked sessions freed back to open, and collected
+      data handled per the signed consent ("retain" keeps it pseudonymously; "delete" removes the enrollment's
+      dataset records, diary responses, and screener answers). Audited with counts. The EnrollmentPanel "Withdraw"
+      button now opens the workflow page (`routes/enrollments/[id]/withdraw.tsx`) instead of a bare transition.
+      Retention timer: `purgeCandidates` (every enrollment terminal + inactive past a window, default 3 years) on
+      the PI-only `/participants/retention` page; `purgeParticipant` (PI-approved, per row, confirmed) erases PII —
+      channels deleted, name overwritten to "[purged]", demographics cleared, do-not-contact set — while the
+      pseudonymous code, enrollments, and research records survive so datasets stay reproducible. Audited
+      (`participant.purged`, code only), irreversible, purged participants never re-list. Tests cover obligations
+      cancellation, retain-vs-delete, candidate gating, purge semantics, and no-PII audit trails.
+      **Phase 4 (data & compensation) complete.**
 
 ## Phase 5 — Polish (still local)
 
