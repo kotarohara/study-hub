@@ -435,7 +435,14 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       `lib/objects/codebook.ts` (pure `buildCodebook`): per-variable type inference (number/string/array/mixed),
       missingness, distinct-value inventory (≤20 listed), numeric min/max/mean; rendered on the dataset page over
       the pilot-quarantined view and shipped with exports in 4.5.
-- [ ] 4.4 EDA islands (client-side, ≤100k rows): summary stats, histograms/box plots, group-by-condition, scale auto-scoring
+- [x] 4.4 EDA islands (client-side, ≤100k rows): summary stats, histograms/box plots, group-by-condition, scale
+      auto-scoring — `lib/eda/stats.ts` (pure: R-type-7 quantiles, `numericSummary`, fixed-width `histogram`,
+      `summarizeByGroup`, numeric-column detection) drives `islands/EdaCharts.tsx`: variable picker → stats table +
+      SVG histogram + per-condition box plots, all computed in the browser over the serialized records.
+      `routes/datasets/[id]/eda.tsx` serializes the pilot-quarantined view (≤100k rows; pilot rows never reach the
+      browser) with condition linkage. Scale auto-scoring (`lib/eda/scale_scores.ts`): the study's screener/diary
+      instruments' scoring rules become derived `scale_<rule>` columns (deterministic derivation server-side;
+      partial scales score null and are skipped). Pure tests for stats + scale derivation.
 - [ ] 4.5 Export: CSV/JSON; profiles full (PI-only) / de-identified / OSF-ready; analysis-ready bundle (data + codebook + R/Python loader); export audit + tests proving PII never leaks into de-identified profiles
 - [ ] 4.6 Compensation object (amount, scheme, method, status pending → approved → paid); outstanding-payments dashboard
 - [ ] 4.7 PayNow/PayPal run sheets + mark-as-paid; Prolific ID tracking; payment confirmations to participants

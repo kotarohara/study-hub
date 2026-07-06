@@ -140,16 +140,24 @@ export default define.page<typeof handler>(({ data, state, url }) => {
                 ? `, first ${PREVIEW_LIMIT} shown`
                 : ""})
             </h2>
-            <a
-              href={`/datasets/${dataset.id}${
-                data.includePilot ? "" : "?pilot=1"
-              }`}
-              class="text-xs text-brand-700 hover:underline"
-            >
-              {data.includePilot
-                ? "Hide pilot records"
-                : "Show quarantined pilot records"}
-            </a>
+            <span class="inline-flex items-center gap-4">
+              <a
+                href={`/datasets/${dataset.id}/eda`}
+                class="text-xs font-medium text-brand-700 hover:underline"
+              >
+                Explore (EDA) →
+              </a>
+              <a
+                href={`/datasets/${dataset.id}${
+                  data.includePilot ? "" : "?pilot=1"
+                }`}
+                class="text-xs text-brand-700 hover:underline"
+              >
+                {data.includePilot
+                  ? "Hide pilot records"
+                  : "Show quarantined pilot records"}
+              </a>
+            </span>
           </div>
           {records.length === 0
             ? (
