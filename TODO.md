@@ -412,8 +412,19 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 4 — Data & Compensation
 
-- [ ] 4.1 Dataset object + file uploads to FileStore; pseudonymous linkage (record → participant ID + condition + session); pilot-data exclusion by default + tests
-- [ ] 4.2 Form responses captured as Dataset records
+- [x] 4.1 Dataset object + file uploads to FileStore; pseudonymous linkage (record → participant ID + condition + session); pilot-data exclusion by default + tests —
+      `datasets`/`dataset_records`/`dataset_files` (migration 0021). Records carry a jsonb payload (research data
+      only, never PII) linked by enrollment; participant code + condition resolve at read time, optional session.
+      `is_pilot` is inherited from the enrollment AT INSERT TIME (promoting a pilot later never un-quarantines old
+      rows) and `listRecords` excludes pilot by default. `sourceKey` gives provenance + idempotency (unique per
+      dataset). Files upload through the study "Data" tab → dataset detail page (`routes/datasets/[id]/`) into the
+      FileStore (MinIO/S3), downloads via audited presigned URLs. Tests: create/unique/ensure, pilot inheritance +
+      quarantine, sourceKey dedup, linkage resolution, FileStore roundtrip.
+- [x] 4.2 Form responses captured as Dataset records — `captureResponse` writes into the well-known "Responses"
+      dataset (auto-created, attributed to the study creator), called INSIDE the same transaction as
+      `submitScreener` (`screener:<enrollmentId>`) and `submitDiaryEntry` (`diary:<promptId>`) so a response and its
+      dataset record land or fail together. Assertions added to the screener + diary integration tests (payload
+      matches answers, pseudonymous, no PII).
 - [ ] 4.3 Generic CSV/JSON importer with column-mapping UI; codebook generation
 - [ ] 4.4 EDA islands (client-side, ≤100k rows): summary stats, histograms/box plots, group-by-condition, scale auto-scoring
 - [ ] 4.5 Export: CSV/JSON; profiles full (PI-only) / de-identified / OSF-ready; analysis-ready bundle (data + codebook + R/Python loader); export audit + tests proving PII never leaks into de-identified profiles

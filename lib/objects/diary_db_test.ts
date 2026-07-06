@@ -23,6 +23,11 @@ import { createStudy } from "./studies.ts";
 import { createParticipant } from "./participants.ts";
 import { createEnrollment } from "./enrollments.ts";
 import { createInstrument } from "./instruments.ts";
+import {
+  listDatasetsOfStudy,
+  listRecords,
+  RESPONSES_DATASET,
+} from "./datasets.ts";
 import type { FormItem } from "./forms.ts";
 import {
   configureDiary,
@@ -258,6 +263,16 @@ Deno.test("submitDiaryEntry: validates, stores, and refuses re-submit / closed",
     assert.equal(stored.length, 1);
     assert.deepEqual(stored[0].answers, { mood: 4 });
     assert.equal((await listPrompts(db, enrollment.id))[0].status, "answered");
+
+    // 4.2: the entry was also captured into the "Responses" dataset,
+    // pseudonymously linked and idempotent per prompt.
+    const responses = (await listDatasetsOfStudy(db, study.id))
+      .find((d) => d.dataset.name === RESPONSES_DATASET);
+    assert.ok(responses);
+    const captured = await listRecords(db, responses.dataset.id);
+    assert.equal(captured.length, 1);
+    assert.deepEqual(captured[0].record.data, { mood: 4 });
+    assert.equal(captured[0].record.sourceKey, `diary:${prompt.id}`);
 
     // Re-submit of an answered prompt is a no-op.
     const again = await submitDiaryEntry(db, {

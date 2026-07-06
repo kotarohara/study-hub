@@ -32,6 +32,7 @@ import {
   validateResponse,
 } from "./forms.ts";
 import { getVersion, versionForm } from "./instruments.ts";
+import { captureResponse } from "./datasets.ts";
 import { enqueueMessage } from "./messaging.ts";
 import { resolveContact } from "./notifications.ts";
 import { getStudy } from "./studies.ts";
@@ -420,6 +421,8 @@ export async function submitDiaryEntry(
   const { answers, errors } = validateResponse(opts.items, opts.raw);
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
+  const study = await getStudy(db, opts.prompt.studyId);
+
   // The unique-promptId insert is the source of truth for "already answered":
   // an empty returning means a response already exists (a stale snapshot or a
   // concurrent submit), so we leave the first entry untouched.
@@ -443,6 +446,16 @@ export async function submitDiaryEntry(
       .update(diaryPrompts)
       .set({ status: "answered", answeredAt: now, updatedAt: now })
       .where(eq(diaryPrompts.id, opts.prompt.id));
+    // Capture the entry as a dataset record (spec §8 item 4.2), atomic with
+    // the response. Pseudonymous linkage only.
+    if (study) {
+      await captureResponse(tx as unknown as Db, {
+        study,
+        enrollmentId: opts.prompt.enrollmentId,
+        data: answers,
+        sourceKey: `diary:${opts.prompt.id}`,
+      });
+    }
   });
   return already ? { ok: true, already: true } : { ok: true };
 }

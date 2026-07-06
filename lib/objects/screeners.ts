@@ -18,6 +18,7 @@ import {
 import { audit } from "../audit/log.ts";
 import { getConfig } from "../config.ts";
 import { notifyDiscordEvent } from "../integrations/discord.ts";
+import { captureResponse } from "./datasets.ts";
 import {
   type FormItem,
   parseItems,
@@ -299,6 +300,14 @@ export async function submitScreener(
       details: { code: participant.code, studyId: opts.study.id, eligible },
       requestId: opts.requestId,
       ip: opts.ip,
+    });
+    // Capture the answers as a dataset record (spec §8 item 4.2) — atomic
+    // with the response, linked pseudonymously by enrollment.
+    await captureResponse(tx as unknown as Db, {
+      study: opts.study,
+      enrollmentId: enrollment.id,
+      data: answers,
+      sourceKey: `screener:${enrollment.id}`,
     });
     return { enrollment, eligible };
   });

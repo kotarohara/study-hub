@@ -715,6 +715,89 @@ export const studySessions = pgTable("study_sessions", {
 
 export type StudySession = typeof studySessions.$inferSelect;
 
+// Datasets (spec §2.1, §3.6): a logical collection of collected data for a
+// study — form responses, imported CSV/JSON rows, uploaded files. Records
+// carry ONLY pseudonymous linkage (enrollment → participant code +
+// condition, optional session); the row payload is jsonb and must never
+// contain PII (contact details live on Participant/ContactChannel). Pilot
+// data quarantine (spec §4 kept-feature 5): `is_pilot` is inherited from
+// the enrollment at insert time and pilot rows are EXCLUDED from listings,
+// stats, and exports by default.
+export const datasets = pgTable("datasets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studyId: uuid("study_id")
+    .notNull()
+    .references(() => studies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  unique("datasets_study_name_unique").on(table.studyId, table.name),
+]);
+
+export type Dataset = typeof datasets.$inferSelect;
+
+export const datasetRecords = pgTable("dataset_records", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  datasetId: uuid("dataset_id")
+    .notNull()
+    .references(() => datasets.id, { onDelete: "cascade" }),
+  /** Pseudonymous linkage; null for imported rows that matched no
+   * participant (kept, but flagged unlinked in the UI). */
+  enrollmentId: uuid("enrollment_id").references(() => enrollments.id, {
+    onDelete: "cascade",
+  }),
+  sessionId: uuid("session_id").references(() => studySessions.id, {
+    onDelete: "set null",
+  }),
+  /** Row payload — research data only, never PII. */
+  data: jsonb("data").$type<Record<string, unknown>>().notNull(),
+  /** Provenance + idempotency: "screener:<id>", "diary:<promptId>",
+   * "import:<fileId>:<row>". Re-capturing the same source is a no-op. */
+  sourceKey: text("source_key"),
+  /** Pilot quarantine, inherited from the enrollment at insert time. */
+  isPilot: boolean("is_pilot").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("dataset_records_dataset_idx").on(table.datasetId),
+  index("dataset_records_enrollment_idx").on(table.enrollmentId),
+  unique("dataset_records_source_unique").on(table.datasetId, table.sourceKey),
+]);
+
+export type DatasetRecord = typeof datasetRecords.$inferSelect;
+
+export const datasetFiles = pgTable("dataset_files", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  datasetId: uuid("dataset_id")
+    .notNull()
+    .references(() => datasets.id, { onDelete: "cascade" }),
+  /** FileStore object key (files bucket). */
+  fileKey: text("file_key").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull().default(""),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  uploadedBy: uuid("uploaded_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("dataset_files_dataset_idx").on(table.datasetId),
+]);
+
+export type DatasetFile = typeof datasetFiles.$inferSelect;
+
 // Messages (spec §3.8): the delivery log for every outbound message —
 // session reminders, booking confirmations, diary prompts, recruitment
 // invites. Channel-agnostic (email/telegram/discord behind a
