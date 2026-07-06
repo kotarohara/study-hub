@@ -33,6 +33,7 @@ import {
   listRecords,
   recordColumns,
 } from "./datasets.ts";
+import { importIntoDataset } from "./importer.ts";
 
 interface Env {
   db: Awaited<ReturnType<typeof getTestDb>>;
@@ -200,6 +201,48 @@ Deno.test("addRecords: pilot inheritance, sourceKey idempotency, linkage on read
 
     // Column union preserves first-seen order.
     assert.deepEqual(recordColumns(all), ["mood", "notes", "extra"]);
+  });
+});
+
+Deno.test("importIntoDataset: code linkage, unmatched kept unlinked, idempotent", async () => {
+  await withEnv(async ({ db, study, member, participant, enrollment }) => {
+    const dataset = await createDataset(db, {
+      study,
+      name: "Qualtrics export",
+      createdBy: member,
+    });
+    const rows = [
+      { code: participant.code, data: { score: 7 } },
+      { code: "P-NOPE", data: { score: 3 } },
+      { code: null, data: { score: 1 } },
+    ];
+
+    const first = await importIntoDataset(db, {
+      dataset,
+      study,
+      rows,
+      sourceKeyPrefix: "import:f1",
+    });
+    assert.equal(first.inserted, 3);
+    assert.equal(first.linked, 1);
+    assert.deepEqual(first.unmatchedCodes, ["P-NOPE"]);
+
+    // Re-import of the same file is a full no-op.
+    const again = await importIntoDataset(db, {
+      dataset,
+      study,
+      rows,
+      sourceKeyPrefix: "import:f1",
+    });
+    assert.equal(again.inserted, 0);
+    assert.equal(again.deduped, 3);
+
+    const records = await listRecords(db, dataset.id);
+    assert.equal(records.length, 3);
+    const linked = records.find((r) => r.participantCode === participant.code);
+    assert.ok(linked);
+    assert.equal(linked.record.enrollmentId, enrollment.id);
+    assert.equal(records.filter((r) => r.participantCode === null).length, 2);
   });
 });
 

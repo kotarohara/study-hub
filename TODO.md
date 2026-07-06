@@ -425,7 +425,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       `submitScreener` (`screener:<enrollmentId>`) and `submitDiaryEntry` (`diary:<promptId>`) so a response and its
       dataset record land or fail together. Assertions added to the screener + diary integration tests (payload
       matches answers, pseudonymous, no PII).
-- [ ] 4.3 Generic CSV/JSON importer with column-mapping UI; codebook generation
+- [x] 4.3 Generic CSV/JSON importer with column-mapping UI; codebook generation — `lib/objects/importer.ts`:
+      hand-rolled RFC-4180 CSV parser (quoted fields, "" escapes, CRLF, ragged rows) + JSON-array parser, both pure
+      and exhaustively unit-tested; `applyMapping` (code column → linkage, selected columns → data, numeric
+      coercion; the code column never becomes row data); `importIntoDataset` resolves codes → enrollments of the
+      study, keeps unmatched rows unlinked and reports their codes, idempotent per `import:<fileId>:<row>` (re-import
+      is a no-op). Flow: upload the CSV/JSON to the dataset's file shelf → "Import rows →" opens the column-mapping
+      page (`routes/datasets/[id]/import.tsx`, researcher+, audited) → result notice on the dataset page.
+      `lib/objects/codebook.ts` (pure `buildCodebook`): per-variable type inference (number/string/array/mixed),
+      missingness, distinct-value inventory (≤20 listed), numeric min/max/mean; rendered on the dataset page over
+      the pilot-quarantined view and shipped with exports in 4.5.
 - [ ] 4.4 EDA islands (client-side, ≤100k rows): summary stats, histograms/box plots, group-by-condition, scale auto-scoring
 - [ ] 4.5 Export: CSV/JSON; profiles full (PI-only) / de-identified / OSF-ready; analysis-ready bundle (data + codebook + R/Python loader); export audit + tests proving PII never leaks into de-identified profiles
 - [ ] 4.6 Compensation object (amount, scheme, method, status pending → approved → paid); outstanding-payments dashboard

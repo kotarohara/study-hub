@@ -13,6 +13,10 @@ import {
   listRecords,
   recordColumns,
 } from "../../../lib/objects/datasets.ts";
+import {
+  buildCodebook,
+  type CodebookEntry,
+} from "../../../lib/objects/codebook.ts";
 import { getDatasetFor } from "./_shared.ts";
 import { Layout } from "../../../components/Layout.tsx";
 import { DetailView } from "../../../components/ooui/DetailView.tsx";
@@ -30,6 +34,8 @@ interface Data {
   totalShown: number;
   includePilot: boolean;
   files: DatasetFile[];
+  codebook: CodebookEntry[];
+  importNotice: string | null;
 }
 
 export const handler = define.handlers({
@@ -39,6 +45,16 @@ export const handler = define.handlers({
     if (!found) throw new HttpError(404);
     const includePilot = ctx.url.searchParams.get("pilot") === "1";
     const records = await listRecords(db, found.dataset.id, { includePilot });
+
+    const imported = ctx.url.searchParams.get("imported");
+    const importNotice = imported === null
+      ? null
+      : `Imported ${imported} row${imported === "1" ? "" : "s"} (${
+        ctx.url.searchParams.get("linked") ?? 0
+      } linked, ${ctx.url.searchParams.get("deduped") ?? 0} already present, ${
+        ctx.url.searchParams.get("unmatched") ?? 0
+      } unmatched codes).`;
+
     return page<Data>({
       dataset: found.dataset,
       studyId: found.study.id,
@@ -48,6 +64,13 @@ export const handler = define.handlers({
       totalShown: records.length,
       includePilot,
       files: await listDatasetFiles(db, found.dataset.id),
+      // The codebook documents the analysis view: pilot-quarantined rows out.
+      codebook: buildCodebook(
+        (includePilot
+          ? records.filter(({ record }) => !record.isPilot)
+          : records).map(({ record }) => record.data),
+      ),
+      importNotice,
     });
   },
 });
@@ -68,6 +91,7 @@ export default define.page<typeof handler>(({ data, state, url }) => {
   const me = state.member!;
   const { dataset, records, columns } = data;
   const canUpload = hasRole(me.role, "assistant");
+  const canImport = hasRole(me.role, "researcher");
 
   return (
     <Layout member={me} pathname={url.pathname}>
@@ -99,6 +123,12 @@ export default define.page<typeof handler>(({ data, state, url }) => {
         {dataset.description && (
           <p class="mb-4 max-w-2xl text-sm text-gray-700">
             {dataset.description}
+          </p>
+        )}
+
+        {data.importNotice && (
+          <p class="mb-4 max-w-2xl rounded-card border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+            {data.importNotice}
           </p>
         )}
 
@@ -185,12 +215,22 @@ export default define.page<typeof handler>(({ data, state, url }) => {
                       ({fmtBytes(file.sizeBytes)})
                     </span>
                   </span>
-                  <a
-                    href={`/datasets/${dataset.id}/files/${file.id}/download`}
-                    class="text-xs text-brand-700 hover:underline"
-                  >
-                    Download ↓
-                  </a>
+                  <span class="inline-flex items-center gap-3">
+                    {canImport && /\.(csv|json)$/i.test(file.fileName) && (
+                      <a
+                        href={`/datasets/${dataset.id}/import?file=${file.id}`}
+                        class="text-xs text-brand-700 hover:underline"
+                      >
+                        Import rows →
+                      </a>
+                    )}
+                    <a
+                      href={`/datasets/${dataset.id}/files/${file.id}/download`}
+                      class="text-xs text-brand-700 hover:underline"
+                    >
+                      Download ↓
+                    </a>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -212,6 +252,52 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             </form>
           )}
         </section>
+
+        {data.codebook.length > 0 && (
+          <section class="mt-8 space-y-2">
+            <h2 class="text-sm font-semibold text-gray-900">
+              Codebook (pilot rows excluded)
+            </h2>
+            <div class="overflow-x-auto">
+              <table class="w-full max-w-4xl text-sm">
+                <thead>
+                  <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <th class="py-2 pr-4">Variable</th>
+                    <th class="py-2 pr-4">Type</th>
+                    <th class="py-2 pr-4">N</th>
+                    <th class="py-2 pr-4">Missing</th>
+                    <th class="py-2 pr-4">Min / Max / Mean</th>
+                    <th class="py-2">Values</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.codebook.map((entry) => (
+                    <tr key={entry.key} class="border-b border-gray-100">
+                      <td class="py-2 pr-4 font-medium text-gray-800">
+                        {entry.key}
+                      </td>
+                      <td class="py-2 pr-4">{entry.type}</td>
+                      <td class="py-2 pr-4">{entry.nonMissing}</td>
+                      <td class="py-2 pr-4">{entry.missing}</td>
+                      <td class="py-2 pr-4">
+                        {entry.type === "number"
+                          ? `${entry.min} / ${entry.max} / ${
+                            entry.mean?.toFixed(2)
+                          }`
+                          : "—"}
+                      </td>
+                      <td class="py-2 text-xs text-gray-600">
+                        {entry.values
+                          ? entry.values.join(", ")
+                          : `${entry.distinct} distinct`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
       </DetailView>
     </Layout>
   );
