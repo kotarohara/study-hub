@@ -45,6 +45,11 @@ const ConfigSchema = z.object({
   // no-show, etc. Pseudonymous IDs only — never PII. Empty = disabled (alerts
   // fall back to the console).
   DISCORD_WEBHOOK_URL: z.string().default(""),
+  // Notion one-way push (spec §5.5): "Push to Notion" writes a study row
+  // into this lab database. Study-level fields only — never PII. Both empty
+  // = disabled (the action hides).
+  NOTION_API_TOKEN: z.string().default(""),
+  NOTION_DATABASE_ID: z.string().default(""),
   // Comma-separated `<version>:<base64 32-byte key>` pairs; highest version
   // encrypts, all versions decrypt (see lib/crypto/encryption.ts).
   PII_ENCRYPTION_KEYS: z.string().regex(

@@ -205,7 +205,10 @@ export default define.page<typeof handler>(({ data }) => {
   return (
     <PublicLayout title={`${data.studyName} — diary entry`}>
       {data.error && (
-        <p class="mb-4 rounded-card border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p
+          role="alert"
+          class="mb-4 rounded-card border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
           {data.error}
         </p>
       )}

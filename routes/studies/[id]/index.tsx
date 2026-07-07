@@ -61,6 +61,7 @@ import {
   type DatasetSummary,
   listDatasetsOfStudy,
 } from "../../../lib/objects/datasets.ts";
+import { notionConfigured } from "../../../lib/integrations/notion.ts";
 import { SessionPanel } from "../../../components/SessionPanel.tsx";
 import { MessageLog } from "../../../components/MessageLog.tsx";
 import { DiaryPanel } from "../../../components/DiaryPanel.tsx";
@@ -95,6 +96,7 @@ interface Data {
   diaryInstruments: { id: string; name: string; currentVersion: number }[];
   diaryProgress: DiaryProgressRow[];
   datasets: DatasetSummary[];
+  notionEnabled: boolean;
 }
 
 const TABS = [
@@ -190,6 +192,7 @@ export const handler = define.handlers({
       datasets: activeTab === "data"
         ? await listDatasetsOfStudy(getDb(), found.study.id)
         : [],
+      notionEnabled: notionConfigured(),
     });
   },
 });
@@ -395,6 +398,20 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             <p class="whitespace-pre-wrap text-sm text-gray-700">
               {study.description || "No description."}
             </p>
+            {data.notionEnabled && hasRole(me.role, "researcher") && (
+              <form
+                method="post"
+                action={`/studies/${study.id}/notion-push`}
+                class="inline"
+              >
+                <button
+                  type="submit"
+                  class="rounded-card border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+                >
+                  {study.notionPageId ? "Update Notion row" : "Push to Notion"}
+                </button>
+              </form>
+            )}
             {study.oversightPathway === "irb_exempt" && (
               <p class="text-sm text-gray-600">
                 <span class="font-medium">IRB exemption reference:</span>{" "}

@@ -59,6 +59,7 @@ export async function versionInputFromForm(
   storeFile: (fileName: string, bytes: Uint8Array) => Promise<string>,
 ): Promise<NewVersionInput> {
   const content = String(form.get("content") ?? "");
+  const externalUrl = String(form.get("externalUrl") ?? "").trim();
   const file = form.get("file");
   const changeRationale = String(form.get("changeRationale") ?? "");
 
@@ -66,9 +67,9 @@ export async function versionInputFromForm(
     if (file.size > MAX_UPLOAD_BYTES) {
       throw new DocumentError("Uploads are limited to 10 MB.");
     }
-    if (content.trim()) {
+    if (content.trim() || externalUrl) {
       throw new DocumentError(
-        "Provide either text content or a file, not both.",
+        "Provide text content, a file, or a link — not several.",
       );
     }
     const fileKey = await storeFile(
@@ -77,6 +78,8 @@ export async function versionInputFromForm(
     );
     return { fileKey, fileName: file.name, changeRationale };
   }
+  // URL record (spec §5.5: e.g. a Notion page linked as a Document).
+  if (externalUrl) return { externalUrl, changeRationale };
   return { content, changeRationale };
 }
 
@@ -240,6 +243,15 @@ export default define.page<typeof handler>(({ data, state, url }) => (
       <label class="flex flex-col gap-1 text-sm">
         … or upload a file (max 10 MB)
         <input type="file" name="file" class="text-sm" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        … or link an external page (e.g. a Notion page)
+        <input
+          type="url"
+          name="externalUrl"
+          placeholder="https://www.notion.so/…"
+          class="max-w-md rounded-card border border-gray-300 px-3 py-2 text-sm"
+        />
       </label>
       <button
         type="submit"

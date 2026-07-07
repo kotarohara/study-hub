@@ -490,11 +490,36 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 5 — Polish (still local)
 
-- [ ] 5.1 Notion one-way push adapter (fake impl + payload tests; no PII assertion) + Notion-page links as Documents
+- [x] 5.1 Notion one-way push adapter (fake impl + payload tests; no PII assertion) + Notion-page links as
+      Documents — `lib/integrations/notion.ts` (injectable transport; `formatStudyProperties` builds the row from a
+      `StudySnapshot` that BY CONSTRUCTION carries only study-level fields + aggregates — no field for a name,
+      email, code, or channel; no-PII test asserts it) + `lib/objects/notion_push.ts` (`pushStudyToNotion`: builds
+      the snapshot from live funnel + milestones, creates the row on first push, updates the same page after —
+      `studies.notion_page_id`, migration 0023 — audited `study.notion_pushed`). "Push to Notion"/"Update Notion
+      row" button on the study Overview tab, shown only when `NOTION_API_TOKEN` + `NOTION_DATABASE_ID` are set.
+      Notion-page links as Documents: `document_versions.external_url` (same migration) — a version is now exactly
+      one of text/file/link, validated http(s); forms accept a URL and the document page renders the link.
 - [ ] 5.2 Health dashboard: funnel vs target N, upcoming sessions, overdue tasks
 - [ ] 5.3 Accessibility pass on participant-facing pages (WCAG 2.1 AA)
-- [ ] 5.4 Security review of PII flows: verify every PII read/export path is role-gated + audited; pen-test magic links (expiry, purpose confusion, tampering)
-- [ ] 5.5 Full local dress rehearsal: seed → run a study end-to-end (recruit → consent → schedule → remind → collect → compensate → export) against the compose stack
+- [x] 5.4 Security review of PII flows: verify every PII read/export path is role-gated + audited; pen-test magic
+      links (expiry, purpose confusion, tampering) — `docs/security-review.md` documents the PII-path gate/audit
+      matrix and the token model. **Finding fixed**: the participant pool list (`/participants`) and detail
+      (`/participants/[id]`) rendered decrypted names/channels but were gated only by "signed in" — a collaborator
+      could view participant PII; both now require `assistant+` (matching edit/new/channel routes, spec §3.10).
+      Pen tests (`lib/crypto/magic_link_pentest_test.ts`) attack the full purpose matrix: purpose confusion (a token
+      verifies for its purpose only — cross-purpose always null), tampering (payload subject/purpose swaps with the
+      original signature fail; truncated/flipped/missing signatures fail; foreign-secret tokens fail), and expiry
+      (past-TTL rejected vs a valid control). Signature is checked timing-safe before payload parse, so error
+      reasons leak nothing.
+- [x] 5.5 Full local dress rehearsal: seed → run a study end-to-end (recruit → consent → schedule → remind →
+      collect → compensate → export) against the compose stack — `lib/objects/dress_rehearsal_db_test.ts` runs ONE
+      study through every phase in a single integration test: create project/study + approved consent + screener →
+      transition to recruiting → public screener submission (eligible, answers captured to the Responses dataset) →
+      record consent + activate → publish/book a session, booking confirmation + reminder swept and delivered via a
+      fake adapter (all to the participant's email) → verify the pseudonymous dataset record → approve + mark-paid a
+      compensation (appears on the outstanding list, drops off when paid) → payment confirmation enqueued → PI
+      ledger carries name + decrypted phone + amount → de-identified export leaks no name/email/stable-code. Proves
+      the phases compose. **Phase 5 (polish) complete — the StudyHub build plan is done through Phase 5.**
 
 ## Phase 6 — AWS Deployment (only when the above is in good shape)
 

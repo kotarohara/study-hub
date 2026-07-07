@@ -17,3 +17,10 @@
 
   --radius-card: 0.5rem;
 }
+
+/* WCAG 2.4.7 (focus visible): a consistent, high-contrast focus ring for
+   keyboard users on every interactive element, participant pages included. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}

@@ -176,7 +176,10 @@ export default define.page<typeof handler>(({ data }) => {
 
         <form method="post" class="space-y-4">
           {data.error && (
-            <p class="rounded-card border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <p
+              role="alert"
+              class="rounded-card border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+            >
               {data.error}
             </p>
           )}
