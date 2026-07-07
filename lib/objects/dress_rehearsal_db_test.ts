@@ -156,15 +156,26 @@ Deno.test("dress rehearsal: recruit → consent → schedule → remind → coll
       actor: me,
     });
     await notifyBookingConfirmed(db, booked.id);
-    const swept = await sweepDueReminders(db);
-    assert.equal(swept.enqueued, 1); // reminder for the session in 6h
+    await sweepDueReminders(db); // enqueues a reminder for the 6h session
 
-    // Deliver the queued messages (confirmation + reminder) via a fake
-    // adapter — proves the job runner drains what the study produced.
+    // Deliver the queued messages via a fake adapter — proves the job
+    // runner drains what the study produced. Assertions are scoped to THIS
+    // enrollment (the sweep/runner operate lab-wide) so the test never
+    // couples to other suites' data.
     const adapter = new FakeAdapter("email");
-    const summary = await runDueMessages(db, { adapter });
-    assert.ok(summary.delivered >= 2);
-    assert.ok(adapter.sent.every((m) => m.to === "dora@example.com"));
+    await runDueMessages(db, { adapter });
+    const enrollmentMessages = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.enrollmentId, live.id));
+    assert.deepEqual(
+      enrollmentMessages.map((m) => m.templateKey).sort(),
+      ["booking_confirmation", "session_reminder"],
+    );
+    assert.ok(enrollmentMessages.every((m) => m.status === "sent"));
+    assert.ok(
+      enrollmentMessages.every((m) => m.recipient === "dora@example.com"),
+    );
 
     // ---- collect: mark the session completed ------------------------------
     // (Data capture already happened at screener submit; the "Responses"
