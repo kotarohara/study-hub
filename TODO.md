@@ -511,7 +511,15 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       original signature fail; truncated/flipped/missing signatures fail; foreign-secret tokens fail), and expiry
       (past-TTL rejected vs a valid control). Signature is checked timing-safe before payload parse, so error
       reasons leak nothing.
-- [ ] 5.5 Full local dress rehearsal: seed → run a study end-to-end (recruit → consent → schedule → remind → collect → compensate → export) against the compose stack
+- [x] 5.5 Full local dress rehearsal: seed → run a study end-to-end (recruit → consent → schedule → remind →
+      collect → compensate → export) against the compose stack — `lib/objects/dress_rehearsal_db_test.ts` runs ONE
+      study through every phase in a single integration test: create project/study + approved consent + screener →
+      transition to recruiting → public screener submission (eligible, answers captured to the Responses dataset) →
+      record consent + activate → publish/book a session, booking confirmation + reminder swept and delivered via a
+      fake adapter (all to the participant's email) → verify the pseudonymous dataset record → approve + mark-paid a
+      compensation (appears on the outstanding list, drops off when paid) → payment confirmation enqueued → PI
+      ledger carries name + decrypted phone + amount → de-identified export leaks no name/email/stable-code. Proves
+      the phases compose. **Phase 5 (polish) complete — the StudyHub build plan is done through Phase 5.**
 
 ## Phase 6 — AWS Deployment (only when the above is in good shape)
 
