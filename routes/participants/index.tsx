@@ -1,4 +1,4 @@
-import { page } from "fresh";
+import { HttpError, page } from "fresh";
 import { define } from "../../utils.ts";
 import { getDb } from "../../lib/db/client.ts";
 import type { Participant } from "../../lib/db/schema.ts";
@@ -7,6 +7,7 @@ import {
   listParticipants,
 } from "../../lib/objects/participants.ts";
 import { audit } from "../../lib/audit/log.ts";
+import { hasRole } from "../../lib/auth/roles.ts";
 import { clientHost } from "../../lib/auth/limiters.ts";
 import { Layout } from "../../components/Layout.tsx";
 import {
@@ -29,6 +30,11 @@ interface Data {
 
 export const handler = define.handlers({
   async GET(ctx) {
+    // The pool shows decrypted names: PII, so collaborators (limited
+    // access, spec §3.10) are excluded — found by the 5.4 security review.
+    if (!hasRole(ctx.state.member!.role, "assistant")) {
+      throw new HttpError(403);
+    }
     const db = getDb();
     const all = await listParticipants(db);
     const result = applyCollection(

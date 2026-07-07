@@ -38,6 +38,11 @@ const TABS = [
 
 export const handler = define.handlers({
   async GET(ctx) {
+    // Decrypted name/notes/channels: PII, so collaborators (limited
+    // access, spec §3.10) are excluded — found by the 5.4 security review.
+    if (!hasRole(ctx.state.member!.role, "assistant")) {
+      throw new HttpError(403);
+    }
     const db = getDb();
     const participant = await getParticipant(db, ctx.params.id);
     if (!participant) throw new HttpError(404);

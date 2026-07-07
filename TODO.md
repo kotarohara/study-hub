@@ -501,7 +501,16 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
       one of text/file/link, validated http(s); forms accept a URL and the document page renders the link.
 - [ ] 5.2 Health dashboard: funnel vs target N, upcoming sessions, overdue tasks
 - [ ] 5.3 Accessibility pass on participant-facing pages (WCAG 2.1 AA)
-- [ ] 5.4 Security review of PII flows: verify every PII read/export path is role-gated + audited; pen-test magic links (expiry, purpose confusion, tampering)
+- [x] 5.4 Security review of PII flows: verify every PII read/export path is role-gated + audited; pen-test magic
+      links (expiry, purpose confusion, tampering) — `docs/security-review.md` documents the PII-path gate/audit
+      matrix and the token model. **Finding fixed**: the participant pool list (`/participants`) and detail
+      (`/participants/[id]`) rendered decrypted names/channels but were gated only by "signed in" — a collaborator
+      could view participant PII; both now require `assistant+` (matching edit/new/channel routes, spec §3.10).
+      Pen tests (`lib/crypto/magic_link_pentest_test.ts`) attack the full purpose matrix: purpose confusion (a token
+      verifies for its purpose only — cross-purpose always null), tampering (payload subject/purpose swaps with the
+      original signature fail; truncated/flipped/missing signatures fail; foreign-secret tokens fail), and expiry
+      (past-TTL rejected vs a valid control). Signature is checked timing-safe before payload parse, so error
+      reasons leak nothing.
 - [ ] 5.5 Full local dress rehearsal: seed → run a study end-to-end (recruit → consent → schedule → remind → collect → compensate → export) against the compose stack
 
 ## Phase 6 — AWS Deployment (only when the above is in good shape)
