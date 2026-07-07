@@ -95,7 +95,9 @@ Deno.test("dress rehearsal: recruit → consent → schedule → remind → coll
       eligibility: [{ item: "age", min: 21, max: 65 }],
       actor: me,
     });
-    // A public screener needs the study recruiting.
+    // A public screener needs the study recruiting; the lifecycle routes
+    // through IRB review (draft → irb_review → recruiting).
+    study = await transitionStudy(db, { study, to: "irb_review", actor: me });
     study = await transitionStudy(db, { study, to: "recruiting", actor: me });
 
     // ---- recruit: a public screener submission ----------------------------
