@@ -199,6 +199,9 @@ export const studies = pgTable("studies", {
     .default("random_balanced"),
   /** Condition names in dispatch order (comma-separated), cycled. */
   assignmentSequence: text("assignment_sequence").notNull().default(""),
+  /** Notion row for this study (spec §5.5 one-way push); "" until first
+   * push, then updates go to the same page. */
+  notionPageId: text("notion_page_id").notNull().default(""),
   createdBy: uuid("created_by")
     .notNull()
     .references(() => members.id),
@@ -288,6 +291,9 @@ export const documentVersions = pgTable("document_versions", {
   content: text("content"),
   fileKey: text("file_key"),
   fileName: text("file_name"),
+  /** URL record (spec §5.5): a linked external page — e.g. a Notion page —
+   * standing in for content. Exactly one of content/fileKey/externalUrl. */
+  externalUrl: text("external_url"),
   /** Amendment workflow: why this version exists (required from v2 on). */
   changeRationale: text("change_rationale").notNull().default(""),
   createdBy: uuid("created_by")

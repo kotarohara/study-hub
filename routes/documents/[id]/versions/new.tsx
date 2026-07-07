@@ -126,6 +126,15 @@ export default define.page<typeof handler>(({ data, state, url }) => (
         … or upload a file (max 10 MB)
         <input type="file" name="file" class="text-sm" />
       </label>
+      <label class="flex flex-col gap-1 text-sm">
+        … or link an external page (e.g. a Notion page)
+        <input
+          type="url"
+          name="externalUrl"
+          placeholder="https://www.notion.so/…"
+          class="max-w-md rounded-card border border-gray-300 px-3 py-2 text-sm"
+        />
+      </label>
       <button
         type="submit"
         class="rounded-card bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"

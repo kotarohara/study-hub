@@ -490,7 +490,15 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 5 — Polish (still local)
 
-- [ ] 5.1 Notion one-way push adapter (fake impl + payload tests; no PII assertion) + Notion-page links as Documents
+- [x] 5.1 Notion one-way push adapter (fake impl + payload tests; no PII assertion) + Notion-page links as
+      Documents — `lib/integrations/notion.ts` (injectable transport; `formatStudyProperties` builds the row from a
+      `StudySnapshot` that BY CONSTRUCTION carries only study-level fields + aggregates — no field for a name,
+      email, code, or channel; no-PII test asserts it) + `lib/objects/notion_push.ts` (`pushStudyToNotion`: builds
+      the snapshot from live funnel + milestones, creates the row on first push, updates the same page after —
+      `studies.notion_page_id`, migration 0023 — audited `study.notion_pushed`). "Push to Notion"/"Update Notion
+      row" button on the study Overview tab, shown only when `NOTION_API_TOKEN` + `NOTION_DATABASE_ID` are set.
+      Notion-page links as Documents: `document_versions.external_url` (same migration) — a version is now exactly
+      one of text/file/link, validated http(s); forms accept a URL and the document page renders the link.
 - [ ] 5.2 Health dashboard: funnel vs target N, upcoming sessions, overdue tasks
 - [ ] 5.3 Accessibility pass on participant-facing pages (WCAG 2.1 AA)
 - [ ] 5.4 Security review of PII flows: verify every PII read/export path is role-gated + audited; pen-test magic links (expiry, purpose confusion, tampering)

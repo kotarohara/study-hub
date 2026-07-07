@@ -151,6 +151,20 @@ export default define.page<typeof handler>(({ data, state, url }) => {
                 </a>
               </p>
             )
+            : data.current?.externalUrl
+            ? (
+              <p class="text-sm">
+                Linked page:{" "}
+                <a
+                  href={data.current.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="break-all text-brand-700 hover:underline"
+                >
+                  {data.current.externalUrl}
+                </a>
+              </p>
+            )
             : <p class="text-sm text-gray-500">No content.</p>
         )}
 

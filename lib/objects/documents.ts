@@ -54,18 +54,27 @@ export function allowedDocumentTransitions(
 export interface NewVersionInput {
   /** In-app text content (diffable) … */
   content?: string;
-  /** … or an uploaded file already stored in the files bucket. */
+  /** … or an uploaded file already stored in the files bucket … */
   fileKey?: string;
   fileName?: string;
+  /** … or a linked external page (spec §5.5: Notion pages as Documents). */
+  externalUrl?: string;
   changeRationale?: string;
 }
 
 function validateVersionInput(input: NewVersionInput) {
-  const hasContent = (input.content ?? "").trim() !== "";
-  const hasFile = !!input.fileKey;
-  if (hasContent === hasFile) {
+  const url = (input.externalUrl ?? "").trim();
+  if (url && (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol))) {
+    throw new DocumentError("The link must be a valid http(s) URL.");
+  }
+  const sources = [
+    (input.content ?? "").trim() !== "",
+    !!input.fileKey,
+    url !== "",
+  ].filter(Boolean).length;
+  if (sources !== 1) {
     throw new DocumentError(
-      "A version needs either text content or an uploaded file (not both).",
+      "A version needs exactly one of: text content, an uploaded file, or a link.",
     );
   }
 }
@@ -139,6 +148,7 @@ export async function createDocument(
       content: opts.initialVersion.content?.trim() || null,
       fileKey: opts.initialVersion.fileKey ?? null,
       fileName: opts.initialVersion.fileName ?? null,
+      externalUrl: opts.initialVersion.externalUrl?.trim() || null,
       createdBy: opts.createdBy.id,
     });
     await audit(tx, {
@@ -179,6 +189,7 @@ export async function addVersion(
       content: opts.version.content?.trim() || null,
       fileKey: opts.version.fileKey ?? null,
       fileName: opts.version.fileName ?? null,
+      externalUrl: opts.version.externalUrl?.trim() || null,
       changeRationale: opts.version.changeRationale!.trim(),
       createdBy: opts.actor.id,
     });
