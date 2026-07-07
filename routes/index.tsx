@@ -109,7 +109,7 @@ export default define.page<typeof handler>(({ data, state, url }) => {
                       · {fmtWhen(session.startsAt)}
                       {session.location && ` · ${session.location}`}
                       <span class="text-gray-500">
-                        {" "}— {session.studyName}
+                        {` — ${session.studyName}`}
                       </span>
                     </li>
                   ))}
