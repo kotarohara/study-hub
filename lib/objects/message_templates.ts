@@ -44,6 +44,14 @@ export const MESSAGE_TEMPLATES: Record<string, MessageTemplate> = {
       `Hi {{first_name}},\n\nIt's time for your {{study_title}} diary entry — it only takes a minute:\n\n{{diary_link}}\n\nThank you!`,
     fields: ["first_name", "study_title", "diary_link"],
   },
+  payment_confirmation: {
+    key: "payment_confirmation",
+    channels: ["email", "telegram"],
+    subject: "Your {{study_title}} compensation has been sent",
+    body:
+      `Hi {{first_name}},\n\nYour compensation of {{amount}} for {{study_title}} has been sent. Thank you for taking part!\n\nIf it doesn't arrive within a few days, just reply to this message.`,
+    fields: ["first_name", "study_title", "amount"],
+  },
 } as const;
 
 export function isMessageTemplate(key: string): boolean {

@@ -47,6 +47,13 @@ export const NAV_ITEMS: NavItem[] = [
     enabled: true,
   },
   {
+    id: "payments",
+    label: "Payments",
+    href: "/payments",
+    icon: "◈",
+    enabled: true,
+  },
+  {
     id: "members",
     label: "Members",
     href: "/members",

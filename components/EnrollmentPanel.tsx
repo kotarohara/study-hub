@@ -61,31 +61,45 @@ function TransitionButtons(props: { row: EnrollmentRow }) {
   const { enrollment } = props.row;
   return (
     <span class="inline-flex flex-wrap items-center gap-1.5">
-      {allowedEnrollmentTransitions(enrollment.status).map((to) => (
-        <form
-          key={to}
-          method="post"
-          action={`/enrollments/${enrollment.id}/transition`}
-          class="inline"
-          data-confirm={EXIT_STATES.includes(to)
-            ? `${
-              TRANSITION_LABELS[to].split(" ")[0]
-            } ${props.row.participantCode} from this study? This is final.`
-            : undefined}
-        >
-          <input type="hidden" name="to" value={to} />
-          <button
-            type="submit"
-            class={`rounded-card border px-2 py-1 text-xs ${
-              EXIT_STATES.includes(to)
-                ? "border-red-200 text-red-700 hover:bg-red-50"
-                : "border-gray-300 text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            {TRANSITION_LABELS[to]}
-          </button>
-        </form>
-      ))}
+      {allowedEnrollmentTransitions(enrollment.status).map((to) =>
+        // Withdrawal is a workflow, not a bare transition: its page also
+        // records consent-permitted data handling and cancels obligations.
+        to === "withdrawn"
+          ? (
+            <a
+              key={to}
+              href={`/enrollments/${enrollment.id}/withdraw`}
+              class="rounded-card border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+            >
+              Withdraw…
+            </a>
+          )
+          : (
+            <form
+              key={to}
+              method="post"
+              action={`/enrollments/${enrollment.id}/transition`}
+              class="inline"
+              data-confirm={EXIT_STATES.includes(to)
+                ? `${
+                  TRANSITION_LABELS[to].split(" ")[0]
+                } ${props.row.participantCode} from this study? This is final.`
+                : undefined}
+            >
+              <input type="hidden" name="to" value={to} />
+              <button
+                type="submit"
+                class={`rounded-card border px-2 py-1 text-xs ${
+                  EXIT_STATES.includes(to)
+                    ? "border-red-200 text-red-700 hover:bg-red-50"
+                    : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {TRANSITION_LABELS[to]}
+              </button>
+            </form>
+          )
+      )}
     </span>
   );
 }

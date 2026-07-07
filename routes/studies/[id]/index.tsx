@@ -57,9 +57,14 @@ import {
   getDiarySchedule,
 } from "../../../lib/objects/diary.ts";
 import { listInstruments } from "../../../lib/objects/instruments.ts";
+import {
+  type DatasetSummary,
+  listDatasetsOfStudy,
+} from "../../../lib/objects/datasets.ts";
 import { SessionPanel } from "../../../components/SessionPanel.tsx";
 import { MessageLog } from "../../../components/MessageLog.tsx";
 import { DiaryPanel } from "../../../components/DiaryPanel.tsx";
+import { DatasetPanel } from "../../../components/DatasetPanel.tsx";
 import { audit } from "../../../lib/audit/log.ts";
 import { clientHost } from "../../../lib/auth/limiters.ts";
 import { Layout } from "../../../components/Layout.tsx";
@@ -89,6 +94,7 @@ interface Data {
   diarySchedule: DiarySchedule | null;
   diaryInstruments: { id: string; name: string; currentVersion: number }[];
   diaryProgress: DiaryProgressRow[];
+  datasets: DatasetSummary[];
 }
 
 const TABS = [
@@ -98,6 +104,7 @@ const TABS = [
   { id: "recruitment", label: "Recruitment" },
   { id: "sessions", label: "Sessions" },
   { id: "diary", label: "Diary" },
+  { id: "data", label: "Data" },
   { id: "documents", label: "Documents" },
   { id: "timeline", label: "Timeline" },
 ];
@@ -179,6 +186,9 @@ export const handler = define.handlers({
         : [],
       diaryProgress: activeTab === "diary"
         ? await diaryProgress(getDb(), found.study.id)
+        : [],
+      datasets: activeTab === "data"
+        ? await listDatasetsOfStudy(getDb(), found.study.id)
         : [],
     });
   },
@@ -520,6 +530,13 @@ export default define.page<typeof handler>(({ data, state, url }) => {
             progress={data.diaryProgress}
             canManage={hasRole(me.role, "researcher")}
             canOperate={hasRole(me.role, "assistant")}
+          />
+        )}
+        {data.activeTab === "data" && (
+          <DatasetPanel
+            study={study}
+            datasets={data.datasets}
+            canManage={hasRole(me.role, "researcher")}
           />
         )}
         {data.activeTab === "timeline" && (

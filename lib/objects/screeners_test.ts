@@ -17,6 +17,11 @@ import { createProject } from "./projects.ts";
 import { createStudy, setOversightPathway } from "./studies.ts";
 import { createInstrument } from "./instruments.ts";
 import {
+  listDatasetsOfStudy,
+  listRecords,
+  RESPONSES_DATASET,
+} from "./datasets.ts";
+import {
   configureScreener,
   getScreenerByToken,
   isScreenerLive,
@@ -307,5 +312,16 @@ Deno.test("submit: creates pool record + enrollment, eligibility sets status", a
     assert.equal(entry.actorId, null);
     assert.equal(entry.details?.eligible, true);
     assert.ok(!JSON.stringify(entry.details).includes("Pat"));
+
+    // 4.2: answers were also captured as dataset records ("Responses"),
+    // linked pseudonymously — no PII in the payload.
+    const responsesDataset = (await listDatasetsOfStudy(db, study.id))
+      .find((d) => d.dataset.name === RESPONSES_DATASET);
+    assert.ok(responsesDataset);
+    const captured = await listRecords(db, responsesDataset.dataset.id);
+    assert.equal(captured.length, 2);
+    const patCapture = captured.find((r) => r.participantCode === pat.code);
+    assert.deepEqual(patCapture?.record.data, { age: 30, device: "phone" });
+    assert.ok(!JSON.stringify(captured).includes("Pat Lim"));
   });
 });

@@ -412,15 +412,81 @@ be testable on a laptop with Docker Compose; AWS deployment is the final phase.
 
 ## Phase 4 — Data & Compensation
 
-- [ ] 4.1 Dataset object + file uploads to FileStore; pseudonymous linkage (record → participant ID + condition + session); pilot-data exclusion by default + tests
-- [ ] 4.2 Form responses captured as Dataset records
-- [ ] 4.3 Generic CSV/JSON importer with column-mapping UI; codebook generation
-- [ ] 4.4 EDA islands (client-side, ≤100k rows): summary stats, histograms/box plots, group-by-condition, scale auto-scoring
-- [ ] 4.5 Export: CSV/JSON; profiles full (PI-only) / de-identified / OSF-ready; analysis-ready bundle (data + codebook + R/Python loader); export audit + tests proving PII never leaks into de-identified profiles
-- [ ] 4.6 Compensation object (amount, scheme, method, status pending → approved → paid); outstanding-payments dashboard
-- [ ] 4.7 PayNow/PayPal run sheets + mark-as-paid; Prolific ID tracking; payment confirmations to participants
-- [ ] 4.8 Ledger export (Name / Phone / Amount), PI-gated + audited + tests
-- [ ] 4.9 Withdrawal workflow (action, data handling per consent) + retention timers + PI-approved purge
+- [x] 4.1 Dataset object + file uploads to FileStore; pseudonymous linkage (record → participant ID + condition + session); pilot-data exclusion by default + tests —
+      `datasets`/`dataset_records`/`dataset_files` (migration 0021). Records carry a jsonb payload (research data
+      only, never PII) linked by enrollment; participant code + condition resolve at read time, optional session.
+      `is_pilot` is inherited from the enrollment AT INSERT TIME (promoting a pilot later never un-quarantines old
+      rows) and `listRecords` excludes pilot by default. `sourceKey` gives provenance + idempotency (unique per
+      dataset). Files upload through the study "Data" tab → dataset detail page (`routes/datasets/[id]/`) into the
+      FileStore (MinIO/S3), downloads via audited presigned URLs. Tests: create/unique/ensure, pilot inheritance +
+      quarantine, sourceKey dedup, linkage resolution, FileStore roundtrip.
+- [x] 4.2 Form responses captured as Dataset records — `captureResponse` writes into the well-known "Responses"
+      dataset (auto-created, attributed to the study creator), called INSIDE the same transaction as
+      `submitScreener` (`screener:<enrollmentId>`) and `submitDiaryEntry` (`diary:<promptId>`) so a response and its
+      dataset record land or fail together. Assertions added to the screener + diary integration tests (payload
+      matches answers, pseudonymous, no PII).
+- [x] 4.3 Generic CSV/JSON importer with column-mapping UI; codebook generation — `lib/objects/importer.ts`:
+      hand-rolled RFC-4180 CSV parser (quoted fields, "" escapes, CRLF, ragged rows) + JSON-array parser, both pure
+      and exhaustively unit-tested; `applyMapping` (code column → linkage, selected columns → data, numeric
+      coercion; the code column never becomes row data); `importIntoDataset` resolves codes → enrollments of the
+      study, keeps unmatched rows unlinked and reports their codes, idempotent per `import:<fileId>:<row>` (re-import
+      is a no-op). Flow: upload the CSV/JSON to the dataset's file shelf → "Import rows →" opens the column-mapping
+      page (`routes/datasets/[id]/import.tsx`, researcher+, audited) → result notice on the dataset page.
+      `lib/objects/codebook.ts` (pure `buildCodebook`): per-variable type inference (number/string/array/mixed),
+      missingness, distinct-value inventory (≤20 listed), numeric min/max/mean; rendered on the dataset page over
+      the pilot-quarantined view and shipped with exports in 4.5.
+- [x] 4.4 EDA islands (client-side, ≤100k rows): summary stats, histograms/box plots, group-by-condition, scale
+      auto-scoring — `lib/eda/stats.ts` (pure: R-type-7 quantiles, `numericSummary`, fixed-width `histogram`,
+      `summarizeByGroup`, numeric-column detection) drives `islands/EdaCharts.tsx`: variable picker → stats table +
+      SVG histogram + per-condition box plots, all computed in the browser over the serialized records.
+      `routes/datasets/[id]/eda.tsx` serializes the pilot-quarantined view (≤100k rows; pilot rows never reach the
+      browser) with condition linkage. Scale auto-scoring (`lib/eda/scale_scores.ts`): the study's screener/diary
+      instruments' scoring rules become derived `scale_<rule>` columns (deterministic derivation server-side;
+      partial scales score null and are skipped). Pure tests for stats + scale derivation.
+- [x] 4.5 Export: CSV/JSON; profiles full (PI-only) / de-identified / OSF-ready; analysis-ready bundle (data +
+      codebook + R/Python loader); export audit + tests proving PII never leaks into de-identified profiles —
+      `lib/export/`: `profiles.ts` defines the three levels (full: stable codes + condition + session/provenance
+      metadata, PI-only because stable codes enable cross-study joins, pilot rows only on explicit request and
+      flagged; de_identified: fresh per-export ids `P001…` assigned in shuffled order, rows shuffled, all metadata
+      dropped, pilot always excluded; osf: de-identified minus open-ended text columns — string columns with >20
+      distinct values, where self-identifying detail hides). `csv.ts` (RFC-4180 serializer), `zip.ts` (hand-rolled
+      store-only ZIP + CRC-32, proven extractable by system `unzip` in tests), `bundle.ts` (data.csv +
+      codebook.json + load.R + load.py + README). Route `routes/datasets/[id]/export.ts` gates full to PI, audits
+      `export.create` BEFORE bytes leave. Tests: profile semantics with injected RNG (same person ⇒ same fresh id,
+      no metadata/stable codes), OSF column dropping, CSV quoting, ZIP roundtrip, and a DB test with a real
+      encrypted participant proving name/email/stable-code never appear in de-identified/OSF output.
+- [x] 4.6 Compensation object (amount, scheme, method, status pending → approved → paid); outstanding-payments
+      dashboard — `compensations` table (migration 0022): integer cents (SGD default), scheme, method
+      (paynow/paypal/prolific/cash/voucher), enforced pending → approved → paid lifecycle with approver/payer +
+      timestamps, transfer `reference`, `prolific_submission_id`. Approvals (`payment.approve`) and payouts
+      (`payment.paid`) audited; races guarded by status-conditional updates. `/payments` dashboard (new nav item):
+      every unpaid compensation lab-wide oldest-first with approve (researcher+) / mark-paid (assistant+) actions,
+      totals (pending / approved, approved-by-method = each run sheet's size), and an add-compensation flow
+      (study → enrollment picker, SSR).
+- [x] 4.7 PayNow/PayPal run sheets + mark-as-paid; Prolific ID tracking; payment confirmations to participants —
+      `lib/objects/ledger.ts` `runSheet(method)`: approved-unpaid rows with decrypted name + payment address
+      (PayNow phone / PayPal email / Prolific ID from ContactChannels; missing channels surface as empty payTo, not
+      silently dropped). CSV at `/payments/runsheet?method=` — PII-bearing → **PI-only**, audited `pii.export`
+      before bytes leave. Close-out: "mark all paid" per method with a shared transfer reference (`markBatchPaid`,
+      only approved rows flip, each payout audited). Every mark-paid enqueues an idempotent `payment_confirmation`
+      message (`payment:<id>`) through the same channel resolution + compliance gates as reminders.
+- [x] 4.8 Ledger export (Name / Phone / Amount), PI-gated + audited + tests — `/payments/ledger`: every PAID
+      compensation with the spec-fixed columns Name / Phone Number / Compensation Amount (+ paid date, method,
+      reference). PI-only; `pii.export` audit written before the response. Tests cover decrypted run-sheet values,
+      ledger columns, and gating-by-status.
+- [x] 4.9 Withdrawal workflow (action, data handling per consent) + retention timers + PI-approved purge —
+      `lib/objects/withdrawal.ts`: `withdrawEnrollment` = the lifecycle transition PLUS everything it would leave
+      dangling — scheduled/sent diary prompts cancelled, future booked sessions freed back to open, and collected
+      data handled per the signed consent ("retain" keeps it pseudonymously; "delete" removes the enrollment's
+      dataset records, diary responses, and screener answers). Audited with counts. The EnrollmentPanel "Withdraw"
+      button now opens the workflow page (`routes/enrollments/[id]/withdraw.tsx`) instead of a bare transition.
+      Retention timer: `purgeCandidates` (every enrollment terminal + inactive past a window, default 3 years) on
+      the PI-only `/participants/retention` page; `purgeParticipant` (PI-approved, per row, confirmed) erases PII —
+      channels deleted, name overwritten to "[purged]", demographics cleared, do-not-contact set — while the
+      pseudonymous code, enrollments, and research records survive so datasets stay reproducible. Audited
+      (`participant.purged`, code only), irreversible, purged participants never re-list. Tests cover obligations
+      cancellation, retain-vs-delete, candidate gating, purge semantics, and no-PII audit trails.
+      **Phase 4 (data & compensation) complete.**
 
 ## Phase 5 — Polish (still local)
 
